@@ -1,0 +1,16 @@
+{
+    "name": "Sistema Checador QR",
+    "short_name": "Checador QR",
+    "start_url": "/",
+    "display": "fullscreen",
+    "orientation": "portrait",
+    "theme_color": "#2563eb",
+    "background_color": "#ffffff",
+    "icons": [
+        {
+            "src": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjMjU2M2ViIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik05IDl2Nmg2VjlIOW0xIDFoNHY0aC00di00bTAtNEg0VjRoNnYyTTQgMTBoMnYySDRWMTBtMCAyaDJ2Mkg0di0ybS0yIDJoMnYySDJ2LTJtMi0yaDJ2MkgybS0yaDJ2Mkg0di0ySDJWOGgydjJINFY4SDJWNkgwVjRoNHYySDJWNkgwVjRoMnYyaDJWNEg0VjJoMnYyaDJWMkg2VjBoMnYySDZWMGgydjJIOFYwaDF2MmgtMVYwaDJWMkg4Vi0yaDF2NGgtMXoiLz48L3N2Zz4=",
+            "sizes": "192x192",
+            "type": "image/svg+xml"
+        }
+    ]
+}

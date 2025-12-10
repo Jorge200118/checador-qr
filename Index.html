@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2563eb">
+    <title>Sistema Checador QR</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header corporativo -->
+        <header class="corporate-header">
+            <div class="header-content">
+                <div class="company-info">
+                    <div class="company-logo">
+                        <div class="logo-placeholder">ADP</div>
+                    </div>
+                    <div class="company-details">
+                        <h1 class="company-name">Aceros del Pacífico</h1>
+                        <p class="company-subtitle">Sistema de Control de Asistencia</p>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="connection-status">
+                        <div class="status-indicator" id="connectionStatus"></div>
+                        <span>Conectado</span>
+                    </div>
+                    <div class="current-time" id="currentTime"></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Login Section -->
+        <section class="auth-section" id="authSection">
+            <div class="auth-container">
+                <div class="auth-card">
+                    <div class="auth-header">
+                        <h2>Acceso a Tablet</h2>
+                        <p>Ingresa el código de acceso</p>
+                    </div>
+                    <form class="auth-form" id="authForm">
+                        <input type="password" 
+                               id="accessCode" 
+                               placeholder="Código de acceso" 
+                               class="auth-input"
+                               maxlength="4">
+                        <button type="submit" class="auth-button">Acceder</button>
+                    </form>
+                    <div class="auth-footer">
+                        <p>Tablet ID: <span id="tabletId">TABLET_01</span></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main App Section -->
+        <main class="main-content" id="mainContent" style="display: none;">
+            <!-- Split Layout Container -->
+            <div class="split-container">
+                <!-- Left Panel - Information -->
+                <div class="info-panel">
+                    <div class="location-info">
+                        <h2 class="location-id" id="locationId">PTRN01</h2>
+                        <div class="location-details">
+                            <p class="address">Avenida Independencia 1856,</p>
+                            <p class="address">Fraccionamiento Cuauhtémoc, Los Mochis, Sin., México</p>
+                        </div>
+                    </div>
+
+                    <div class="instructions">
+                        <h3>Instrucciones de uso:</h3>
+                        <div class="instruction-step">
+                            <span class="step-number">1.</span>
+                            <span class="step-text">Genera tu QR en la app FiscoClic People</span>
+                        </div>
+                        <div class="instruction-step">
+                            <span class="step-number">2.</span>
+                            <span class="step-text">Acerca el código QR a la cámara de la tablet</span>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons" id="actionButtons">
+                        <button class="action-btn entrada-btn" id="btnEntrada">
+                            <span class="btn-icon">→</span>
+                            <span>ENTRADA</span>
+                        </button>
+                        <button class="action-btn salida-btn" id="btnSalida">
+                            <span class="btn-icon">←</span>
+                            <span>SALIDA</span>
+                        </button>
+                    </div>
+
+                    <button class="config-btn" id="configBtn">
+                        <span>⚙</span> Configuración
+                    </button>
+                </div>
+
+                <!-- Right Panel - Camera -->
+                <div class="camera-panel" id="cameraPanel">
+                    <div class="camera-header">
+                        <h3>Escáner QR</h3>
+                        <button class="cancel-btn" id="btnCancelScan" style="display: none;">
+                            Cancelar
+                        </button>
+                    </div>
+                    
+                    <div class="camera-container">
+                        <video id="videoElement" autoplay muted playsinline></video>
+                        <canvas id="canvasElement" style="display: none;"></canvas>
+                        
+                        <div class="scan-overlay">
+                            <div class="scan-frame">
+                                <div class="scan-corners">
+                                    <div class="corner top-left"></div>
+                                    <div class="corner top-right"></div>
+                                    <div class="corner bottom-left"></div>
+                                    <div class="corner bottom-right"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="camera-status">
+                        <p>Posiciona el código QR dentro del marco</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading Section -->
+            <section class="loading-section" id="loadingSection" style="display: none;">
+                <div class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <p>Procesando registro...</p>
+                </div>
+            </section>
+
+            <!-- Message Section -->
+            <section class="message-section" id="messageSection" style="display: none;">
+                <div class="message-container">
+                    <div class="message-icon" id="messageIcon"></div>
+                    <h3 id="messageTitle"></h3>
+                    <p id="messageText"></p>
+                    <div class="employee-info" id="employeeInfo"></div>
+                    <button class="message-close-btn" id="messageCloseBtn">
+                        Continuar
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>&copy; 2024 Sistema Checador QR | Tablet: <span id="footerTabletId">TABLET_01</span></p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
