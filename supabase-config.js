@@ -124,7 +124,7 @@ const SupabaseAPI = {
                     if (ultimoRegistro.tipo_registro === 'ENTRADA') {
                         return {
                             valido: false,
-                            mensaje: 'Ya tienes una entrada registrada sin salida'
+                            mensaje: 'Ya checaste, vete a chambear'
                         };
                     }
                 }
@@ -158,7 +158,7 @@ const SupabaseAPI = {
                 if (salidaPosterior && salidaPosterior.length > 0) {
                     return {
                         valido: false,
-                        mensaje: 'Ya tienes una salida registrada'
+                        mensaje: 'Ya checaste salida, ve a casa'
                     };
                 }
             }
