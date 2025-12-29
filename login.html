@@ -2,164 +2,324 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#2563eb">
-    <title>Sistema Checador QR</title>
-    <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso - Sistema Checador QR</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 60px 40px;
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+
+        .logo {
+            margin-bottom: 30px;
+        }
+
+        .logo h1 {
+            color: #333;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .logo p {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .form-group {
+            margin-bottom: 30px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #333;
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        #codigoAcceso {
+            width: 100%;
+            padding: 20px;
+            font-size: 1.8rem;
+            text-align: center;
+            border: 3px solid #e1e5e9;
+            border-radius: 15px;
+            outline: none;
+            letter-spacing: 8px;
+            font-weight: 600;
+        }
+
+        #codigoAcceso:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        #btnIngresar {
+            width: 100%;
+            padding: 20px;
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        #btnIngresar:hover {
+            transform: translateY(-2px);
+        }
+
+        #btnIngresar:active {
+            transform: translateY(0);
+        }
+
+        #btnIngresar:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+            font-weight: 500;
+        }
+
+        .loading {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .footer {
+            margin-top: 40px;
+            color: #999;
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 40px 30px;
+            }
+            
+            .logo h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Header corporativo -->
-        <header class="corporate-header">
-            <div class="header-content">
-                <div class="company-info">
-                    <div class="company-logo">
-                        <div class="logo-placeholder">ADP</div>
-                    </div>
-                    <div class="company-details">
-                        <h1 class="company-name">Aceros del Pacífico</h1>
-                        <p class="company-subtitle">Sistema de Control de Asistencia</p>
-                    </div>
-                </div>
-                <div class="header-right">
-                    <div class="connection-status">
-                        <div class="status-indicator" id="connectionStatus"></div>
-                        <span>Conectado</span>
-                    </div>
-                    <div class="current-time" id="currentTime"></div>
-                </div>
-            </div>
-        </header>
+    <div class="login-container">
+        <div class="logo">
+            <h1>🔒</h1>
+            <h1>Checador QR</h1>
+            <p>Acceso de Tablet</p>
+        </div>
 
-        <!-- Login Section -->
-        <section class="auth-section" id="authSection">
-            <div class="auth-container">
-                <div class="auth-card">
-                    <div class="auth-header">
-                        <h2>Acceso a Tablet</h2>
-                        <p>Ingresa el código de acceso</p>
-                    </div>
-                    <form class="auth-form" id="authForm">
-                        <input type="password" 
-                               id="accessCode" 
-                               placeholder="Código de acceso" 
-                               class="auth-input"
-                               maxlength="4">
-                        <button type="submit" class="auth-button">Acceder</button>
-                    </form>
-                    <div class="auth-footer">
-                        <p>Tablet ID: <span id="tabletId">TABLET_01</span></p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Main App Section -->
-        <main class="main-content" id="mainContent" style="display: none;">
-            <!-- Split Layout Container -->
-            <div class="split-container">
-                <!-- Left Panel - Information -->
-                <div class="info-panel">
-                    <div class="location-info">
-                        <h2 class="location-id" id="locationId">PTRN01</h2>
-                        <div class="location-details">
-                            <p class="address">Avenida Independencia 1856,</p>
-                            <p class="address">Fraccionamiento Cuauhtémoc, Los Mochis, Sin., México</p>
-                        </div>
-                    </div>
-
-                    <div class="instructions">
-                        <h3>Instrucciones de uso:</h3>
-                        <div class="instruction-step">
-                            <span class="step-number">1.</span>
-                            <span class="step-text">Genera tu QR en la app FiscoClic People</span>
-                        </div>
-                        <div class="instruction-step">
-                            <span class="step-number">2.</span>
-                            <span class="step-text">Acerca el código QR a la cámara de la tablet</span>
-                        </div>
-                    </div>
-
-                    <div class="action-buttons" id="actionButtons">
-                        <button class="action-btn entrada-btn" id="btnEntrada">
-                            <span class="btn-icon">→</span>
-                            <span>ENTRADA</span>
-                        </button>
-                        <button class="action-btn salida-btn" id="btnSalida">
-                            <span class="btn-icon">←</span>
-                            <span>SALIDA</span>
-                        </button>
-                    </div>
-
-                    <button class="config-btn" id="configBtn">
-                        <span>⚙</span> Configuración
-                    </button>
-                </div>
-
-                <!-- Right Panel - Camera -->
-                <div class="camera-panel" id="cameraPanel">
-                    <div class="camera-header">
-                        <h3>Escáner QR</h3>
-                        <button class="cancel-btn" id="btnCancelScan" style="display: none;">
-                            Cancelar
-                        </button>
-                    </div>
-                    
-                    <div class="camera-container">
-                        <video id="videoElement" autoplay muted playsinline></video>
-                        <canvas id="canvasElement" style="display: none;"></canvas>
-                        
-                        <div class="scan-overlay">
-                            <div class="scan-frame">
-                                <div class="scan-corners">
-                                    <div class="corner top-left"></div>
-                                    <div class="corner top-right"></div>
-                                    <div class="corner bottom-left"></div>
-                                    <div class="corner bottom-right"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="camera-status">
-                        <p>Posiciona el código QR dentro del marco</p>
-                    </div>
-                </div>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="codigoAcceso">Código de Acceso</label>
+                <input 
+                    type="password" 
+                    id="codigoAcceso" 
+                    name="codigo" 
+                    placeholder="••••"
+                    maxlength="10"
+                    autocomplete="off"
+                    required
+                >
             </div>
 
-            <!-- Loading Section -->
-            <section class="loading-section" id="loadingSection" style="display: none;">
-                <div class="loading-container">
-                    <div class="loading-spinner"></div>
-                    <p>Procesando registro...</p>
-                </div>
-            </section>
+            <button type="submit" id="btnIngresar">
+                INGRESAR
+            </button>
 
-            <!-- Message Section -->
-            <section class="message-section" id="messageSection" style="display: none;">
-                <div class="message-container">
-                    <div class="message-icon" id="messageIcon"></div>
-                    <h3 id="messageTitle"></h3>
-                    <p id="messageText"></p>
-                    <div class="employee-info" id="employeeInfo"></div>
-                    <button class="message-close-btn" id="messageCloseBtn">
-                        Continuar
-                    </button>
-                </div>
-            </section>
-        </main>
+            <div class="error-message" id="errorMessage">
+                Código incorrecto. Intenta de nuevo.
+            </div>
 
-        <!-- Footer -->
-        <footer class="app-footer">
-            <p>&copy; 2024 Sistema Checador QR | Tablet: <span id="footerTabletId">TABLET_01</span></p>
-        </footer>
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Verificando acceso...</p>
+            </div>
+        </form>
+
+        <div class="footer">
+            <p>Sistema de Control de Asistencia</p>
+        </div>
     </div>
 
-    <!-- Scripts -->
-    <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+    <!-- Cargar librería de Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js"></script>
-    <script src="app.js"></script>
+
+    <script>
+        // Configuración de Supabase
+        const SUPABASE_CONFIG = {
+            url: 'https://uqncsqstpcynjxnjhrqu.supabase.co',
+            anonKey: 'sb_publishable_bY6BY3wa5Xm2JCG2fy4F3g_fFgS5OsA'
+        };
+
+        // Inicializar cliente de Supabase
+        const supabaseClient = supabase.createClient(
+            SUPABASE_CONFIG.url,
+            SUPABASE_CONFIG.anonKey
+        );
+
+        // Elementos
+        const form = document.getElementById('loginForm');
+        const codigoInput = document.getElementById('codigoAcceso');
+        const btnIngresar = document.getElementById('btnIngresar');
+        const errorMessage = document.getElementById('errorMessage');
+        const loading = document.getElementById('loading');
+
+        // Auto-focus al cargar
+        window.addEventListener('load', () => {
+            codigoInput.focus();
+        });
+
+        // Manejar envío del formulario
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const codigo = codigoInput.value.trim();
+
+            if (!codigo) {
+                mostrarError('Por favor ingresa un código');
+                return;
+            }
+
+            await verificarCodigo(codigo);
+        });
+
+        // Función para verificar código
+        async function verificarCodigo(codigo) {
+            try {
+                // Mostrar loading
+                mostrarLoading(true);
+                ocultarError();
+
+                // Buscar en la tabla de códigos de acceso de tablets
+                const { data, error } = await supabaseClient
+                    .from('tablet_access_codes')
+                    .select('*')
+                    .eq('codigo', codigo)
+                    .eq('activo', true)
+                    .single();
+
+                if (error || !data) {
+                    mostrarError('Código incorrecto');
+                    codigoInput.value = '';
+                    codigoInput.focus();
+                    return;
+                }
+
+                // Éxito - guardar en localStorage y redirigir
+                localStorage.setItem('tablet_auth', 'true');
+                localStorage.setItem('tablet_auth_time', new Date().toISOString());
+                localStorage.setItem('tablet_id', data.tablet_id || 'TABLET-01');
+
+                // Redirigir a la aplicación principal
+                window.location.href = 'tablet-app/Index.html';
+
+            } catch (error) {
+                console.error('Error al verificar código:', error);
+                mostrarError('Error de conexión. Verifica tu red.');
+            } finally {
+                mostrarLoading(false);
+            }
+        }
+
+        // Mostrar/ocultar loading
+        function mostrarLoading(show) {
+            loading.style.display = show ? 'block' : 'none';
+            btnIngresar.disabled = show;
+            codigoInput.disabled = show;
+        }
+
+        // Mostrar error
+        function mostrarError(mensaje) {
+            errorMessage.textContent = mensaje;
+            errorMessage.style.display = 'block';
+            
+            // Auto-ocultar después de 3 segundos
+            setTimeout(() => {
+                ocultarError();
+            }, 3000);
+        }
+
+        // Ocultar error
+        function ocultarError() {
+            errorMessage.style.display = 'none';
+        }
+
+        // Verificar si ya está autenticado
+        function verificarAuthExistente() {
+            const auth = localStorage.getItem('tablet_auth');
+            if (auth === 'true') {
+                // Ya está autenticado, redirigir
+                window.location.href = 'tablet-app/Index.html';
+            }
+        }
+
+        // Verificar al cargar la página
+        verificarAuthExistente();
+
+        // Manejar tecla Enter en el input
+        codigoInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                form.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // Solo permitir números y letras
+        codigoInput.addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        });
+
+        console.log('🔐 Sistema de login inicializado');
+    </script>
 </body>
 </html>
