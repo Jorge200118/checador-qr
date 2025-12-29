@@ -179,7 +179,7 @@ function verificarAuth() {
     const auth = localStorage.getItem('tablet_auth');
     if (auth !== 'true') {
         // Redirigir al login si no está autenticado
-        window.location.href = '../login.html';
+        window.location.href = 'login.html';
         return false;
     }
     return true;
