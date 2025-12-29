@@ -262,7 +262,7 @@
                 localStorage.setItem('tablet_id', data.tablet_id || 'TABLET-01');
 
                 // Redirigir a la aplicación principal
-                window.location.href = 'tablet-app/Index.html';
+                window.location.href = 'Index.html';
 
             } catch (error) {
                 console.error('Error al verificar código:', error);
@@ -300,7 +300,7 @@
             const auth = localStorage.getItem('tablet_auth');
             if (auth === 'true') {
                 // Ya está autenticado, redirigir
-                window.location.href = 'tablet-app/Index.html';
+                window.location.href = 'Index.html';
             }
         }
 
