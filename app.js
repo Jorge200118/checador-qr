@@ -5,8 +5,8 @@ const TABLET_CONFIG = {
     // apiUrl ya no se usa - Supabase se configura en supabase-config.js
 };
 
-// CÓDIGOS VÁLIDOS PARA LOGIN (DEPRECADO - Ahora se usa login.html con Supabase)
-// const CODIGOS_VALIDOS = ['1810'];
+// CÓDIGOS VÁLIDOS PARA LOGIN
+const CODIGOS_VALIDOS = ['1810'];
 
 // ESTADO DE LA APLICACIÓN
 let appState = {
@@ -127,11 +127,11 @@ function setupTablet() {
     }
 }
 function setupEventListeners() {
-    // Formulario de autenticación (DEPRECADO - ahora se usa login.html)
-    // if (elements.authForm) {
-    //     elements.authForm.addEventListener('submit', handleAuth);
-    // }
-
+    // Formulario de autenticación
+    if (elements.authForm) {
+        elements.authForm.addEventListener('submit', handleAuth);
+    }
+    
     // Botones de acción
     if (elements.btnEntrada) {
         elements.btnEntrada.addEventListener('click', () => selectMode());
@@ -178,19 +178,12 @@ function setupEventListeners() {
 function verificarAuth() {
     const auth = localStorage.getItem('tablet_auth');
     if (auth !== 'true') {
-        // Redirigir al login si no está autenticado
-        window.location.href = 'login.html';
-        return false;
+        return true; // Para pruebas, permitir acceso sin login
     }
     return true;
 }
 
 function checkAuthentication() {
-    // Verificar autenticación antes de mostrar contenido
-    if (!verificarAuth()) {
-        return;
-    }
-
     showMainContent();
     // Iniciar escaneo automáticamente sin esperar a que toquen los botones
     setTimeout(() => {
@@ -198,11 +191,34 @@ function checkAuthentication() {
     }, 500);
 }
 
-// ===== FUNCIONES DE AUTENTICACIÓN (DEPRECADAS) =====
-// Ahora se usa login.html centralizado con Supabase
-// function handleAuth(e) { ... }
-// function showAuthSection() { ... }
-// function showAuthError(message) { ... }
+function handleAuth(e) {
+    e.preventDefault();
+
+    const code = elements.accessCode.value.trim();
+
+    if (CODIGOS_VALIDOS.includes(code)) {
+        localStorage.setItem('tablet_auth', 'true');
+        appState.authenticated = true;
+        showMainContent();
+        elements.accessCode.value = '';
+    } else {
+        showAuthError('Código de acceso incorrecto');
+        elements.accessCode.value = '';
+        elements.accessCode.focus();
+    }
+}
+
+function showAuthSection() {
+    if (elements.authSection) {
+        elements.authSection.style.display = 'flex';
+    }
+    if (elements.mainContent) {
+        elements.mainContent.style.display = 'none';
+    }
+    if (elements.accessCode) {
+        elements.accessCode.focus();
+    }
+}
 
 function showMainContent() {
     if (elements.authSection) {
@@ -210,6 +226,15 @@ function showMainContent() {
     }
     if (elements.mainContent) {
         elements.mainContent.style.display = 'flex';
+    }
+}
+
+function showAuthError(message) {
+    if (elements.accessCode) {
+        elements.accessCode.style.borderColor = '#ef4444';
+        setTimeout(() => {
+            elements.accessCode.style.borderColor = '#e5e7eb';
+        }, 3000);
     }
 }
 
@@ -853,10 +878,10 @@ async function handleQRDetected(code) {
         appState.processing = false;
         resetMode();
 
-        // Auto-reload después de 8 segundos (más tiempo para ver el mensaje)
+        // Auto-reload después de 3 segundos
         setTimeout(() => {
             location.reload();
-        }, 8000);
+        }, 3000);
     }
 }
 
@@ -954,7 +979,7 @@ async function startPhotoCountdown(registroResult) {
 
         setTimeout(() => {
             if (cameraSection) cameraSection.style.display = 'none';
-        }, 2000);
+        }, 1000);
 
     } catch (error) {
         console.error('Error en countdown foto:', error);
@@ -1263,7 +1288,7 @@ function showEmployeeError(title, errorMessage) {
     
     setTimeout(() => {
         location.reload();
-    }, 6000);
+    }, 3000);
 }
 
 function updateStatus(message, type = 'info') {
@@ -1286,7 +1311,7 @@ function updateStatus(message, type = 'info') {
         if (type !== 'error') {
             setTimeout(() => {
                 elements.messageSection.style.display = 'none';
-            }, 5000);
+            }, 2000);
         }
     }
 }
