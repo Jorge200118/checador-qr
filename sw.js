@@ -1,8 +1,10 @@
 // Service Worker para Sistema Checador QR
-const CACHE_NAME = 'checador-qr-v1';
+const CACHE_NAME = 'checador-qr-v2'; // v2: bloqueo de horario (Fase 1-A)
 const urlsToCache = [
     '/',
     '/app.js',
+    '/supabase-config.js',
+    '/bloqueo-horario.js',
     '/styles.css',
     '/manifest.json'
 ];
