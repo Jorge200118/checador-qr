@@ -75,9 +75,18 @@ const SupabaseAPI = {
                 };
             }
 
-            // Buscar bloque de horario válido
+            // Validar tope de hora (ENTRADA) y buscar bloque de horario (Fase 1-A)
             let bloqueId = null;
-            if (qrData.empleado.horario_id) {
+            if (tipoRegistro === 'ENTRADA') {
+                const horario = await this.validarHorarioEntrada(qrData.empleado);
+                if (!horario.permitido) {
+                    return {
+                        success: false,
+                        message: horario.mensaje
+                    };
+                }
+                bloqueId = horario.bloque?.id || null;
+            } else if (qrData.empleado.horario_id) {
                 const bloque = await this.getBloqueValido(
                     qrData.empleado.horario_id,
                     tipoRegistro
@@ -177,59 +186,69 @@ const SupabaseAPI = {
         }
     },
 
-    // Obtener bloque de horario válido
-    async getBloqueValido(horarioId, tipoRegistro) {
-        try {
-            const ahora = new Date();
-            const hora = ahora.toISOString().substring(11, 19); // HH:MM:SS
+    // Entradas de hoy del empleado (para la validación de horario, Fase 1-A)
+    async getEntradasHoy(empleadoId) {
+        const hoy = new Date();
+        const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+        const finHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59);
+        const { data, error } = await supabaseClient
+            .from('registros')
+            .select('tipo_registro, fecha_hora')
+            .eq('empleado_id', empleadoId)
+            .eq('tipo_registro', 'ENTRADA')
+            .gte('fecha_hora', inicioHoy.toISOString())
+            .lte('fecha_hora', finHoy.toISOString());
+        if (error) { console.error('Error leyendo entradas de hoy:', error); return null; }
+        return data || [];
+    },
 
-            const { data: bloques } = await supabaseClient
-                .from('bloques_horario')
-                .select('*')
-                .eq('horario_id', horarioId)
-                .order('orden_bloque');
+    // Valida el tope de hora de una ENTRADA (Fase 1-A, spec 2026-06-09).
+    // La secuencia ENTRADA/SALIDA la sigue validando validarRegistro.
+    async validarHorarioEntrada(empleado) {
+        if (!empleado.horario_id) return { permitido: true, bloque: null, mensaje: null };
 
-            if (!bloques || bloques.length === 0) return null;
-
-            // Buscar bloque válido según la hora actual
-            for (const bloque of bloques) {
-                const horaEntrada = bloque.hora_entrada;
-                const horaSalida = bloque.hora_salida;
-
-                if (tipoRegistro === 'ENTRADA') {
-                    // Rango: 15 min antes hasta 600 min después de la hora de entrada
-                    const entradaMin = new Date(`1970-01-01T${horaEntrada}`);
-                    entradaMin.setMinutes(entradaMin.getMinutes() - 15);
-                    const entradaMax = new Date(`1970-01-01T${horaEntrada}`);
-                    entradaMax.setMinutes(entradaMax.getMinutes() + 600);
-
-                    const horaActual = new Date(`1970-01-01T${hora}`);
-
-                    if (horaActual >= entradaMin && horaActual <= entradaMax) {
-                        return bloque;
-                    }
-                } else {
-                    // Para salida, dentro del rango de tolerancia
-                    const tolerancia = bloque.tolerancia_salida_min || 15;
-                    const salidaMin = new Date(`1970-01-01T${horaSalida}`);
-                    salidaMin.setMinutes(salidaMin.getMinutes() - tolerancia);
-                    const salidaMax = new Date(`1970-01-01T${horaSalida}`);
-                    salidaMax.setMinutes(salidaMax.getMinutes() + tolerancia);
-
-                    const horaActual = new Date(`1970-01-01T${hora}`);
-
-                    if (horaActual >= salidaMin && horaActual <= salidaMax) {
-                        return bloque;
-                    }
-                }
-            }
-
-            return null;
-
-        } catch (error) {
-            console.error('Error obteniendo bloque:', error);
-            return null;
+        const { data: bloques, error } = await supabaseClient
+            .from('bloques_horario')
+            .select('*')
+            .eq('horario_id', empleado.horario_id)
+            .order('orden_bloque');
+        if (error) {
+            console.error('Error leyendo bloques:', error);
+            return { permitido: false, bloque: null, mensaje: 'No se pudo verificar tu horario. Intenta de nuevo.' };
         }
+
+        const regs = await this.getEntradasHoy(empleado.id);
+        if (regs === null) {
+            return { permitido: false, bloque: null, mensaje: 'No se pudo verificar tus registros. Intenta de nuevo.' };
+        }
+        const entradasMin = regs.map(r => bhMinutosDeFechaHora(r.fecha_hora));
+
+        const ahora = new Date();
+        const ahoraMin = ahora.getHours() * 60 + ahora.getMinutes();
+        return bhEvaluarEntrada(bloques, entradasMin, ahoraMin, ahora.getDay() === 6);
+    },
+
+    // Solo para SALIDA: encuentra el bloque cuya hora_salida cae dentro de la
+    // tolerancia. Las ENTRADAs se validan con validarHorarioEntrada (Fase 1-A).
+    // Fix: antes usaba toISOString() (hora UTC, corrida 7h); ahora hora local.
+    async getBloqueValido(horarioId, tipoRegistro) {
+        if (!horarioId || tipoRegistro !== 'SALIDA') return null;
+
+        const { data: bloques } = await supabaseClient
+            .from('bloques_horario')
+            .select('*')
+            .eq('horario_id', horarioId)
+            .order('orden_bloque');
+        if (!bloques || bloques.length === 0) return null;
+
+        const ahora = new Date();
+        const ahoraMin = ahora.getHours() * 60 + ahora.getMinutes();
+        for (const b of bloques) {
+            const tol = b.tolerancia_salida_min || 15;
+            const salida = bhMinutosDe(b.hora_salida);
+            if (ahoraMin >= salida - tol && ahoraMin <= salida + tol) return b;
+        }
+        return null;
     },
 
     // Crear registro de asistencia
