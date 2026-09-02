@@ -80,6 +80,7 @@ const SupabaseAPI = {
             if (tipoRegistro === 'ENTRADA') {
                 const horario = await this.validarHorarioEntrada(qrData.empleado);
                 if (!horario.permitido) {
+                    await this.guardarIntentoRechazado(qrData.empleado, horario);
                     return {
                         success: false,
                         message: horario.mensaje
@@ -226,6 +227,40 @@ const SupabaseAPI = {
         const ahora = new Date();
         const ahoraMin = ahora.getHours() * 60 + ahora.getMinutes();
         return bhEvaluarEntrada(bloques, entradasMin, ahoraMin, ahora.getDay() === 6);
+    },
+
+    // Deja constancia de una checada que el bloqueo rechazo.
+    // NO es un registro y por eso va a otra tabla: ningun calculo de asistencia,
+    // horas o nomina debe contarla como checada valida. Sirve para saber quien SI
+    // llego y con cuantos minutos de retardo; sin esto, el que llega tarde es
+    // indistinguible del que no vino y no hay retardo que descontar.
+    // El tope y los minutos salen del bloque que le toca a ESTE empleado.
+    // Si falla, se traga el error: jamas debe estorbar el rechazo ni la app.
+    async guardarIntentoRechazado(empleado, horario) {
+        try {
+            const a = new Date();
+            const p = n => String(n).padStart(2, '0');
+            const fechaHoraLocal = `${a.getFullYear()}-${p(a.getMonth() + 1)}-${p(a.getDate())} `
+                + `${p(a.getHours())}:${p(a.getMinutes())}:${p(a.getSeconds())}.`
+                + String(a.getMilliseconds()).padStart(3, '0');
+
+            const { error } = await supabaseClient
+                .from('intentos_checada')
+                .insert({
+                    empleado_id: empleado.id,
+                    fecha_hora: fechaHoraLocal,
+                    tipo_registro: 'ENTRADA',
+                    motivo: 'FUERA_DE_HORARIO',
+                    bloque_horario_id: horario.bloque ? horario.bloque.id : null,
+                    tope_hora: horario.topeHora || null,
+                    minutos_retardo: horario.minutosRetardo != null ? horario.minutosRetardo : null,
+                    origen: 'TABLET',
+                    tablet_id: typeof TABLET_CONFIG !== 'undefined' ? TABLET_CONFIG.id : null
+                });
+            if (error) console.error('No se pudo guardar el intento rechazado:', error);
+        } catch (e) {
+            console.error('No se pudo guardar el intento rechazado:', e);
+        }
     },
 
     // Solo para SALIDA: encuentra el bloque cuya hora_salida cae dentro de la

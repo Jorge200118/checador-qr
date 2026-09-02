@@ -61,6 +61,12 @@ function bhEvaluarEntrada(bloques, entradasHoyMin, ahoraMin, esSabado) {
     return {
         permitido: false,
         bloque,
-        mensaje: `Fuera de horario. La entrada al turno cerró a las ${hh}:${mm}. Repórtalo con tu jefe.`
+        mensaje: `Fuera de horario. La entrada al turno cerró a las ${hh}:${mm}. Repórtalo con tu jefe.`,
+        // Datos del rechazo. Se guardan en intentos_checada para no perder a
+        // que hora llego: sin esto, el que llega tarde es indistinguible del
+        // que no vino y no hay retardo que descontar. Ambos salen del bloque
+        // que le toca a ESTE empleado, no de valores fijos.
+        topeHora: `${hh}:${mm}:00`,
+        minutosRetardo: ahoraMin - tope
     };
 }
