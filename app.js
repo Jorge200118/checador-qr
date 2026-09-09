@@ -57,6 +57,28 @@ const elements = {
     locationId: document.getElementById('locationId')
 };
 
+// El service worker existia desde hace tiempo pero NADIE lo registraba: el
+// archivo estaba ahi y el navegador nunca lo cargo, asi que todo el cacheo que
+// prometian sus comentarios era mentira.
+//
+// Importa sobre todo de cara al reconocimiento facial: son 67 MB de modelos, y
+// el mas grande (37 MB) lo sirve Supabase con Cache-Control: no-cache. Como
+// esta pantalla recarga la pagina 3 segundos despues de cada checada, sin este
+// cache se volverian a bajar en CADA checada.
+//
+// Se registra despues de que cargo la pagina para no pelearle el ancho de banda
+// a la camara, y si falla se sigue sin el: es una mejora de velocidad, no un
+// requisito para checar.
+function registrarServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+            .then(() => console.log('📱 Service Worker registrado'))
+            .catch(e => console.warn('📱 No se pudo registrar el Service Worker:', e));
+    });
+}
+registrarServiceWorker();
+
 // INICIALIZAR APLICACIÓN
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
