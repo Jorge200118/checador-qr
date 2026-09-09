@@ -416,6 +416,28 @@ html, body {
     font-size: 1.1rem;
 }
 
+/* El aviso del encuadre, ENCIMA del video. Se reporto que la tira de abajo no
+   se veia: la persona esta mirandose en la camara para acomodarse, no leyendo
+   debajo. Va arriba y traslucido para no taparle la cara. */
+.camera-aviso {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 5;
+    padding: 1rem;
+    background: rgba(17, 24, 39, 0.85);
+    color: #fff;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.25;
+    text-align: center;
+}
+
+@media (max-height: 600px) {
+    .camera-aviso { font-size: 1.15rem; padding: 0.6rem; }
+}
+
 /* SECCIONES OVERLAY */
 .loading-section, .message-section {
     position: fixed;

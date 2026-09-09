@@ -7,6 +7,9 @@
     <title>Sistema Checador QR</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://uqncsqstpcynjxnjhrqu.supabase.co" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
 </head>
 <body>
     <div class="app-container">
@@ -101,9 +104,6 @@
                 <div class="camera-panel" id="cameraPanel">
                     <div class="camera-header">
                         <h3>Escáner QR</h3>
-                        <button class="cancel-btn" id="btnCancelScan" style="display: none;">
-                            Cancelar
-                        </button>
                     </div>
                     
                     <div class="camera-container">
@@ -120,10 +120,22 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- "Colócate frente a la cámara", "Acércate un poco
+                             más", "Voltea de frente". VAN AQUI, encima del
+                             video: la persona esta mirandose en la camara, no
+                             la tira gris de abajo. Va arriba para no taparle
+                             la cara, y se quita solo cuando no hay nada que
+                             decir. NO es cortina: se sigue viendo. -->
+                        <div class="camera-aviso" id="cameraAviso" style="display: none;"></div>
                     </div>
 
+                    <!-- Aqui van los avisos del proceso ("acércate", "no te
+                         muevas"). NO en el panel de mensajes, que es una cortina
+                         negra a pantalla completa y tapa justo la camara en la
+                         que la persona se tiene que ver. -->
                     <div class="camera-status">
-                        <p>Posiciona el código QR dentro del marco</p>
+                        <p id="cameraStatus">Posiciona el código QR dentro del marco</p>
                     </div>
                 </div>
             </div>
@@ -152,14 +164,21 @@
 
         <!-- Footer -->
         <footer class="app-footer">
-            <p>&copy; 2024 Sistema Checador QR | Tablet: <span id="footerTabletId">TABLET_01</span></p>
+            <p>&copy; 2024 Sistema Checador QR | Tablet: <span id="footerTabletId">TABLET_01</span> | <span id="footerVersion">—</span></p>
         </footer>
     </div>
 
     <!-- Scripts -->
+    <!-- Version fija a proposito: con @latest, unpkg contesta un 302 en cada
+         carga y el redirect no se puede cachear, asi que la tableta pagaba un
+         viaje de mas antes de poder leer un solo QR. -->
     <script src="https://unpkg.com/@zxing/library@0.23.0/umd/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="bloqueo-horario.js"></script>
+    <!-- deteccion-cara.js y verificacion-rostro.js NO van aqui: este sitio es
+         el de las 8 sucursales y no procesa caras. Todas las llamadas al rostro
+         en app.js estan protegidas con typeof, asi que con no cargarlos el
+         camino queda apagado. Ver la rama de pruebas. -->
     <script src="supabase-config.js"></script>
     <script src="app.js"></script>
 </body>

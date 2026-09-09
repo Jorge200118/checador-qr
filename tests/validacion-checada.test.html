@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Validación de la checada — pruebas</title>
+<style>body{font-family:monospace;padding:20px}.ok{color:#16a34a}.fail{color:#dc2626}</style>
+</head><body>
+<h1>Lo que decide si una checada se acepta</h1>
+<p>Estas funciones dejaron de consultar la base para recibir ya pedidos los
+bloques y los registros del día. Eso quitó dos viajes al servidor por checada —
+y las volvió probables.</p>
+<div id="out"></div>
+<script src="../bloqueo-horario.js"></script>
+<script src="../supabase-config.js"></script>
+<script>
+const out = document.getElementById('out');
+let pass = 0, fail = 0;
+function test(nombre, fn) {
+  try { fn(); pass++; out.innerHTML += `<div class="ok">ok &nbsp; ${nombre}</div>`; }
+  catch (e) { fail++; out.innerHTML += `<div class="fail">FAIL ${nombre}: ${e.message}</div>`; }
+}
+function eq(a, b, msg) {
+  if (JSON.stringify(a) !== JSON.stringify(b))
+    throw new Error(`${msg || ''} esperaba ${JSON.stringify(b)} y dio ${JSON.stringify(a)}`);
+}
+
+window.addEventListener('load', () => {
+  // Un horario de dos bloques, como los de verdad: 08:30-14:00 y 16:00-18:00.
+  const BLOQUES = [
+    { id: 1, orden_bloque: 1, hora_entrada: '08:30:00', hora_salida: '14:00:00',
+      tolerancia_entrada_min: 15, tolerancia_salida_min: 15 },
+    { id: 2, orden_bloque: 2, hora_entrada: '16:00:00', hora_salida: '18:00:00',
+      tolerancia_entrada_min: 15, tolerancia_salida_min: 15 },
+  ];
+  const CON_HORARIO = { id: 7, horario_id: 3 };
+  const SIN_HORARIO = { id: 8, horario_id: null };
+  const API = SupabaseAPI;
+
+  // === lo que no se puede verificar NO se rechaza a medias ===
+  test('a quien no tiene horario no se le aplica ninguna regla', () =>
+    eq(API.validarHorarioEntrada(SIN_HORARIO, null, null).permitido, true));
+
+  test('si los bloques no se pudieron leer, se dice y no se inventa', () => {
+    const r = API.validarHorarioEntrada(CON_HORARIO, null, []);
+    eq(r.permitido, false);
+    if (!r.mensaje.includes('horario')) throw new Error(r.mensaje);
+  });
+
+  test('si los registros no se pudieron leer, se dice y no se inventa', () => {
+    const r = API.validarHorarioEntrada(CON_HORARIO, BLOQUES, null);
+    eq(r.permitido, false);
+    if (!r.mensaje.includes('registros')) throw new Error(r.mensaje);
+  });
+
+  // Miercoles 2 de septiembre de 2026, para que la regla del sabado no entre.
+  const alas = (h, m) => new Date(2026, 8, 2, h, m, 0);
+
+  // === el tope de hora sigue siendo el del bloque ===
+  test('llegar dentro de la tolerancia se permite', () =>
+    eq(API.validarHorarioEntrada(CON_HORARIO, BLOQUES, [], alas(8, 44)).permitido, true));
+
+  test('un minuto despues del tope ya no', () => {
+    const r = API.validarHorarioEntrada(CON_HORARIO, BLOQUES, [], alas(8, 46));
+    eq(r.permitido, false);
+    eq(r.topeHora, '08:45:00');
+    eq(r.minutosRetardo, 1);
+  });
+
+  // === el filtro que antes hacia la consulta ===
+  // getEntradasHoy pedia SOLO las ENTRADAs. Ahora llega el dia completo y el
+  // filtro se hace aqui: si se olvidara, una SALIDA contaria como entrada y
+  // abriria un bloque que nadie abrio.
+  test('una SALIDA no abre el bloque de la tarde', () => {
+    const delDia = [
+      { tipo_registro: 'ENTRADA', fecha_hora: '2026-09-02 08:29:00' },
+      { tipo_registro: 'SALIDA',  fecha_hora: '2026-09-02 14:02:00' },
+    ];
+    // 16:40 es tarde para el bloque 2 (tope 16:15). La SALIDA no lo abre.
+    const r = API.validarHorarioEntrada(CON_HORARIO, BLOQUES, delDia, alas(16, 40));
+    eq(r.permitido, false, 'la salida no debe abrir el bloque:');
+    eq(r.bloque.id, 2);
+  });
+
+  test('una ENTRADA propia del bloque si lo deja seguir abierto', () => {
+    const delDia = [{ tipo_registro: 'ENTRADA', fecha_hora: '2026-09-02 16:05:00' }];
+    eq(API.validarHorarioEntrada(CON_HORARIO, BLOQUES, delDia, alas(16, 40)).permitido, true);
+  });
+
+  // === quien puede salir ===
+  // Estas tres respuestas salian de dos consultas encadenadas. Ahora salen de
+  // mirar el ultimo registro, que es lo mismo: "hay una entrada abierta" es
+  // exactamente "lo ultimo que hizo fue entrar".
+  test('con una entrada abierta si puede salir', () =>
+    eq(decidirSalida({ tipo_registro: 'ENTRADA' }).valido, true));
+
+  test('si ya habia salido, no puede volver a salir', () => {
+    const r = decidirSalida({ tipo_registro: 'SALIDA' });
+    eq(r.valido, false);
+    if (!r.mensaje.includes('Ya checaste salida')) throw new Error(r.mensaje);
+  });
+
+  test('sin ningun registro, no hay de donde salir', () => {
+    for (const nada of [null, undefined]) {
+      const r = decidirSalida(nada);
+      eq(r.valido, false, `con ${nada}:`);
+      if (!r.mensaje.includes('No tienes una entrada')) throw new Error(r.mensaje);
+    }
+  });
+
+  // === el bloque de la salida ===
+  test('la salida solo agarra bloque si es SALIDA', () =>
+    eq(API.getBloqueValido(BLOQUES, 'ENTRADA'), null));
+
+  test('sin bloques no hay bloque de salida', () => {
+    eq(API.getBloqueValido(null, 'SALIDA'), null);
+    eq(API.getBloqueValido([], 'SALIDA'), null);
+  });
+
+  out.innerHTML += `<h2 class="${fail ? 'fail' : 'ok'}">${pass} pasaron, ${fail} fallaron</h2>`;
+});
+</script>
+</body></html>
