@@ -134,13 +134,29 @@ registrarServiceWorker();
 const VIGILAR_VERSION_MS = 5 * 60 * 1000;
 let _versionCargada = null;
 
-async function versionPublicada() {
+// Se vigilan TODOS los archivos que deciden algo, no solo app.js. Vigilar uno
+// solo tenia un hueco caro: un cambio a la validacion de la checada vive en
+// supabase-config.js y bloqueo-horario.js, asi que se desplegaba, app.js no
+// cambiaba, la tableta nunca se enteraba y seguia corriendo la regla vieja hasta
+// que alguien la recargara a mano.
+const ARCHIVOS_VIGILADOS = ['app.js', 'supabase-config.js', 'bloqueo-horario.js'];
+
+async function etagDe(archivo) {
     try {
-        const r = await fetch('app.js', { method: 'HEAD', cache: 'no-store' });
+        const r = await fetch(archivo, { method: 'HEAD', cache: 'no-store' });
         return r.headers.get('etag') || r.headers.get('last-modified');
     } catch (e) {
-        return null;   // sin red no se recarga nada
+        return null;
     }
+}
+
+// La huella de lo publicado: los ETag de todos los vigilados, pegados. Si
+// cualquiera falta se devuelve null y no se recarga nada, que es el mismo
+// criterio de siempre para cuando no hay red.
+async function versionPublicada() {
+    const etags = await Promise.all(ARCHIVOS_VIGILADOS.map(etagDe));
+    if (etags.some(e => !e)) return null;
+    return etags.join('|');
 }
 
 function tabletaOcupada() {
