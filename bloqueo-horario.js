@@ -1,7 +1,7 @@
 // Lógica pura de bloqueo de horario (Fase 1-A).
 // Sin dependencias de Supabase ni del DOM, para poder probarla en tests/.
-// COPIA IDÉNTICA en V3 Checador-PWA y v2 Checador-Tablet — cualquier cambio
-// aquí debe replicarse en el otro repo.
+// COPIA IDÉNTICA en checador-qr (tabletas), V3 Checador-PWA y v2 Checador-Tablet:
+// cualquier cambio aquí debe replicarse en los otros repos.
 
 // '08:00:00' -> 480 (minutos desde medianoche)
 function bhMinutosDe(horaStr) {
@@ -69,4 +69,73 @@ function bhEvaluarEntrada(bloques, entradasHoyMin, ahoraMin, esSabado) {
         topeHora: `${hh}:${mm}:00`,
         minutosRetardo: ahoraMin - tope
     };
+}
+
+// Evalúa si una SALIDA se permite (regla del 2026-09-15).
+//
+// Nace de un dato incómodo: del 1-ago al 15-sep, en los horarios que salen a las
+// 18:00 hubo 599 salidas checadas entre las 17:30 y las 17:58, casi todas
+// apretadas entre las 17:54 y las 17:59. La ventana se cierra para que la
+// checada de salida vuelva a significar que la jornada se cumplió.
+//
+//   bloques    filas de bloques_horario (la tableta las trae con select *)
+//   ahoraMin   minutos desde medianoche (hora local del dispositivo)
+//   diaSemana  0=domingo … 6=sábado, tal cual lo devuelve Date.getDay()
+//
+// La ventana sale de la base, nunca del código:
+//   empieza en  hora_salida - bloqueo_salida_min      18:00 - 30 = 17:30
+//   abre en     hora_salida - tolerancia_salida_min   18:00 -  2 = 17:58
+//
+// Un bloque sin `bloqueo_salida_min` no bloquea nada, y ese es el default: por
+// eso los demás horarios siguen igual sin tocarlos.
+//
+// El borde de arriba es `tolerancia_salida_min` a propósito y no un campo
+// propio: es el MISMO dato con el que el reporte de días completos del Admin
+// decide si el día cerró. Compartirlo es lo único que impide que el bloqueo y el
+// reporte digan cosas distintas sobre la misma hora.
+//
+// Devuelve { permitido, bloque, mensaje }.
+function bhEvaluarSalida(bloques, ahoraMin, diaSemana) {
+    // Sin horario/bloques no hay regla que aplicar.
+    if (!bloques || bloques.length === 0) {
+        return { permitido: true, bloque: null, mensaje: null };
+    }
+
+    // Solo de lunes a viernes. El sábado se sale a las 13:30 y esa hora no vive
+    // ni puede vivir en bloques_horario (la tabla no tiene día de semana). Sin
+    // ventana que defender, bloquear a ciegas solo arriesga atorar a quien
+    // trabaje un sábado largo.
+    if (diaSemana < 1 || diaSemana > 5) {
+        return { permitido: true, bloque: null, mensaje: null };
+    }
+
+    for (const b of bloques) {
+        if (b.bloqueo_salida_min === null || b.bloqueo_salida_min === undefined) continue;
+
+        const salida = bhMinutosDe(b.hora_salida);
+        const tol = (b.tolerancia_salida_min === null || b.tolerancia_salida_min === undefined)
+            ? 15 : b.tolerancia_salida_min;
+        const empieza = salida - b.bloqueo_salida_min;
+        const abre = salida - tol;
+
+        // Si la tolerancia creciera por encima de la ventana, `empieza >= abre`
+        // y esta condición no se cumple nunca: el rango queda vacío en vez de
+        // invertirse.
+        if (ahoraMin >= empieza && ahoraMin < abre) {
+            const hh = String(Math.floor(abre / 60)).padStart(2, '0');
+            const mm = String(abre % 60).padStart(2, '0');
+            return {
+                permitido: false,
+                bloque: b,
+                mensaje: `Aún no es hora de salida. Puedes checar a partir de las ${hh}:${mm}.`,
+                // Para dejar constancia en intentos_checada. `minutos_retardo` se
+                // queda en null: cuántos minutos antes se quiso ir se saca
+                // restando fecha_hora de tope_hora, y meter un negativo en un
+                // campo llamado "retardo" es una trampa para el primer SUM().
+                topeHora: `${hh}:${mm}:00`
+            };
+        }
+    }
+
+    return { permitido: true, bloque: null, mensaje: null };
 }

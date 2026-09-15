@@ -113,6 +113,85 @@ window.addEventListener('load', () => {
     eq(API.getBloqueValido([], 'SALIDA'), null);
   });
 
+  // === la salida anticipada (spec 2026-09-15) ===
+  // Copia del bloque 4 de produccion: turno tarde que cierra a las 18:00, con
+  // ventana de 30 min y tolerancia de 2 => se bloquea de 17:30 a 17:57.
+  const CON_BLOQUEO = [
+    { id: 1, orden_bloque: 1, hora_entrada: '08:30:00', hora_salida: '14:00:00',
+      tolerancia_entrada_min: 15, tolerancia_salida_min: 15 },
+    { id: 2, orden_bloque: 2, hora_entrada: '16:00:00', hora_salida: '18:00:00',
+      tolerancia_entrada_min: 15, tolerancia_salida_min: 2, bloqueo_salida_min: 30 },
+  ];
+
+  test('un bloque sin bloqueo_salida_min no bloquea ninguna salida', () =>
+    eq(API.validarHorarioSalida(BLOQUES, alas(17, 40)).permitido, true));
+
+  test('un minuto antes de que abra la ventana, todavia se puede salir', () =>
+    eq(API.validarHorarioSalida(CON_BLOQUEO, alas(17, 29)).permitido, true));
+
+  test('el primer minuto de la ventana ya se rechaza', () =>
+    eq(API.validarHorarioSalida(CON_BLOQUEO, alas(17, 30)).permitido, false));
+
+  test('el ultimo minuto de la ventana sigue rechazado', () =>
+    eq(API.validarHorarioSalida(CON_BLOQUEO, alas(17, 57)).permitido, false));
+
+  test('a la hora en que abre, se permite', () =>
+    eq(API.validarHorarioSalida(CON_BLOQUEO, alas(17, 58)).permitido, true));
+
+  test('pasada la hora de salida, se permite', () =>
+    eq(API.validarHorarioSalida(CON_BLOQUEO, alas(18, 5)).permitido, true));
+
+  test('el mensaje le dice al empleado desde que hora puede checar', () => {
+    const r = API.validarHorarioSalida(CON_BLOQUEO, alas(17, 45));
+    if (!r.mensaje.includes('17:58')) throw new Error(r.mensaje);
+  });
+
+  test('el rechazo lleva el tope, para dejarlo en intentos_checada', () => {
+    const r = API.validarHorarioSalida(CON_BLOQUEO, alas(17, 45));
+    eq(r.topeHora, '17:58:00');
+    eq(r.bloque.id, 2);
+  });
+
+  test('el bloque de la manana no estorba: a las 13:50 se puede salir', () =>
+    eq(API.validarHorarioSalida(CON_BLOQUEO, alas(13, 50)).permitido, true));
+
+  // El sabado se sale a las 13:30 y esa hora no vive en la base. Sin ventana que
+  // defender, no se bloquea nada.
+  test('el sabado no se bloquea', () =>
+    eq(API.validarHorarioSalida(CON_BLOQUEO, new Date(2026, 8, 5, 17, 45)).permitido, true));
+
+  test('el domingo tampoco', () =>
+    eq(API.validarHorarioSalida(CON_BLOQUEO, new Date(2026, 8, 6, 17, 45)).permitido, true));
+
+  test('sin bloques no hay regla que aplicar', () => {
+    eq(API.validarHorarioSalida([], alas(17, 45)).permitido, true);
+  });
+
+  // Al reves que la entrada: si la consulta fallo, se deja checar. Quedarse
+  // atrapado sin poder marcar la salida es peor que una salida anticipada.
+  test('si los bloques no se pudieron leer, la salida pasa igual', () =>
+    eq(API.validarHorarioSalida(null, alas(17, 45)).permitido, true));
+
+  test('si la tolerancia se come la ventana, no queda nada que bloquear', () => {
+    const raro = [{ id: 9, orden_bloque: 1, hora_entrada: '08:00:00', hora_salida: '18:00:00',
+                    tolerancia_salida_min: 40, bloqueo_salida_min: 30 }];
+    for (const h of [[17, 20], [17, 45], [17, 59]]) {
+      eq(API.validarHorarioSalida(raro, alas(h[0], h[1])).permitido, true, `a las ${h[0]}:${h[1]}`);
+    }
+  });
+
+  // El margen con que se etiqueta el bloque de una salida tiene piso de 15 min:
+  // no sigue a tolerancia_salida_min hacia abajo. Sin el piso, con tolerancia 2
+  // toda salida de 18:03 en adelante se guardaria sin bloque.
+  test('la salida de las 18:10 sigue agarrando su bloque aunque la tolerancia sea 2', () => {
+    const real = Date;
+    try {
+      Date = function () { return new real(2026, 8, 2, 18, 10, 0); };
+      Date.prototype = real.prototype;
+      eq(API.getBloqueValido(CON_BLOQUEO, 'SALIDA').id, 2);
+    } finally { Date = real; }
+  });
+
   out.innerHTML += `<h2 class="${fail ? 'fail' : 'ok'}">${pass} pasaron, ${fail} fallaron</h2>`;
 });
 </script>

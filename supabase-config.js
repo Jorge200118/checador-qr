@@ -143,6 +143,14 @@ const SupabaseAPI = {
                 }
                 bloqueId = horario.bloque?.id || null;
             } else {
+                const salida = this.validarHorarioSalida(bloques);
+                if (!salida.permitido) {
+                    await this.guardarIntentoRechazado(qrData.empleado, salida, 'SALIDA', 'SALIDA_ANTICIPADA');
+                    return {
+                        success: false,
+                        message: salida.mensaje
+                    };
+                }
                 const bloque = this.getBloqueValido(bloques, tipoRegistro);
                 bloqueId = bloque?.id || null;
             }
@@ -293,14 +301,35 @@ const SupabaseAPI = {
         return bhEvaluarEntrada(bloques, entradasMin, ahoraMin, ahora.getDay() === 6);
     },
 
-    // Deja constancia de una checada que el bloqueo rechazo.
+    // Valida que una SALIDA no caiga en la ventana de salida anticipada
+    // (spec 2026-09-15). La ventana la define cada bloque en la base: va de
+    // `hora_salida - bloqueo_salida_min` a `hora_salida - tolerancia_salida_min`,
+    // y un bloque sin `bloqueo_salida_min` no bloquea nada.
+    //
+    // Al reves que la entrada, esta falla ABIERTA: si la consulta de bloques no
+    // llego (`bloques === null`), se deja checar. Dejar a alguien atrapado sin
+    // poder marcar su salida por un error de red es peor que dejar pasar una
+    // salida anticipada.
+    //
+    // `ahora` se puede inyectar: la regla depende de la hora y del dia de la
+    // semana, y sin poder fijarlos no habria como probarla.
+    validarHorarioSalida(bloques, ahora = new Date()) {
+        if (!bloques) return { permitido: true, bloque: null, mensaje: null };
+
+        const ahoraMin = ahora.getHours() * 60 + ahora.getMinutes();
+        return bhEvaluarSalida(bloques, ahoraMin, ahora.getDay());
+    },
+
+    // Deja constancia de una checada que el bloqueo rechazo, sea por llegar
+    // tarde (ENTRADA / FUERA_DE_HORARIO) o por querer irse antes
+    // (SALIDA / SALIDA_ANTICIPADA).
     // NO es un registro y por eso va a otra tabla: ningun calculo de asistencia,
     // horas o nomina debe contarla como checada valida. Sirve para saber quien SI
     // llego y con cuantos minutos de retardo; sin esto, el que llega tarde es
     // indistinguible del que no vino y no hay retardo que descontar.
     // El tope y los minutos salen del bloque que le toca a ESTE empleado.
     // Si falla, se traga el error: jamas debe estorbar el rechazo ni la app.
-    async guardarIntentoRechazado(empleado, horario) {
+    async guardarIntentoRechazado(empleado, horario, tipoRegistro = 'ENTRADA', motivo = 'FUERA_DE_HORARIO') {
         try {
             const a = new Date();
             const p = n => String(n).padStart(2, '0');
@@ -313,8 +342,8 @@ const SupabaseAPI = {
                 .insert({
                     empleado_id: empleado.id,
                     fecha_hora: fechaHoraLocal,
-                    tipo_registro: 'ENTRADA',
-                    motivo: 'FUERA_DE_HORARIO',
+                    tipo_registro: tipoRegistro,
+                    motivo: motivo,
                     bloque_horario_id: horario.bloque ? horario.bloque.id : null,
                     tope_hora: horario.topeHora || null,
                     minutos_retardo: horario.minutosRetardo != null ? horario.minutosRetardo : null,
@@ -376,7 +405,12 @@ const SupabaseAPI = {
         const ahora = new Date();
         const ahoraMin = ahora.getHours() * 60 + ahora.getMinutes();
         for (const b of bloques) {
-            const tol = b.tolerancia_salida_min || 15;
+            // Piso de 15 min. Este margen solo sirve para etiquetar a que bloque
+            // pertenece la salida; no es una regla de negocio. Al bajar
+            // tolerancia_salida_min a 2 para el bloqueo de salida anticipada, sin
+            // el piso la ventana de etiquetado se habria encogido a 17:58-18:02 y
+            // toda salida de 18:03 en adelante se habria guardado sin bloque.
+            const tol = Math.max(b.tolerancia_salida_min || 15, 15);
             const salida = bhMinutosDe(b.hora_salida);
             if (ahoraMin >= salida - tol && ahoraMin <= salida + tol) return b;
         }
