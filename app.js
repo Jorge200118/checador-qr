@@ -997,10 +997,11 @@ async function handleQRDetected(code) {
         const rostroDetiene = (typeof vrDetiene === 'function') && vrDetiene(cfgRostro);
         const maxIntentos = rostroDetiene ? Math.max(1, cfgRostro.intentos_maximos || 1) : 1;
 
-        // ¿Se niega la checada si nadie se paró frente a la cámara? Es aparte de
+        // ¿Se niega la checada si en la foto no sale ninguna cara? Es aparte de
         // BLOQUEA: "¿hay alguien ahí?" no es la misma pregunta que "¿eres tú?".
+        // La primera no necesita referencia ni umbral, asi que tambien aplica a
+        // quien todavia esta armando la suya.
         const exigeRostro = (typeof vrExigeRostro === 'function')
-            && (typeof dcNadieSeParo === 'function')
             && (typeof vrHayCara === 'function')
             && vrExigeRostro(cfgRostro);
 
@@ -1109,18 +1110,35 @@ async function handleQRDetected(code) {
             // indefendible: la foto es lo que se guarda y lo que se enseñaria en
             // un reclamo.
             //
-            // Asi que la foto manda. `vrHayCara` devuelve null si no se pudo
-            // mirar (sin malla, error) y entonces no se rechaza a nadie: no
-            // saber no es lo mismo que no haber nadie.
-            if (exigeRostro && dcNadieSeParo(caraLista)) {
+            // Asi que la foto manda.
+            //
+            // Antes esto solo se miraba cuando el encuadre habia pasado sus 12
+            // segundos sin ver a nadie. Eran DOS condiciones, y por eso casi
+            // nunca disparaba: bastaba aparecer un momento al principio para
+            // que ya no se revisara la foto final.
+            //
+            // El 2026-09-21, primer dia con el rostro en las 8 sucursales,
+            // salieron 6 checadas "sin cara en la foto" que pasaron igual. Entre
+            // las fotos habia manos tapando el lente y el QR puesto delante de
+            // la camara. O sea: el camino funcionaba, y es justo el hueco que el
+            // rostro venia a cerrar.
+            //
+            // Ahora la foto manda sola. Si en la foto que queda como evidencia
+            // no hay una cara, esa foto no prueba quien checo, y la checada no
+            // pasa. `vrHayCara` devuelve null si no se pudo mirar (sin malla,
+            // error) y entonces NO se rechaza a nadie: no saber no es lo mismo
+            // que no haber nadie, y una falla nuestra no le cuesta la checada
+            // a la persona.
+            if (exigeRostro) {
                 const hayCara = await vrHayCara(lienzo);
                 reloj = marcarTiempo('mirar la foto', reloj);
                 if (hayCara === false) {
                     nadieSeParo = true;
                     break;
                 }
-                console.log('👤 El encuadre no vio a nadie, pero la foto sí:',
-                            hayCara === null ? 'no se pudo mirar' : 'hay cara');
+                if (hayCara === null) {
+                    console.log('👤 No se pudo mirar la foto; no se rechaza');
+                }
             }
 
             // En REGISTRA no se mide aqui: la medicion va DESPUES de guardar la
