@@ -394,6 +394,54 @@ const SupabaseAPI = {
         }
     },
 
+    // Retiene la checada que el rostro no dejo pasar, para que alguien la
+    // autorice desde el panel.
+    //
+    // Es DISTINTO de guardarIntentoRostro, y conviene no confundirlos:
+    // `intentos_checada` es la bitacora de lo que se rechazo —se escribe y ahi
+    // muere—, mientras que esto es una checada VIVA esperando resolucion. Se
+    // guardan los dos: la bitacora para medir, el pendiente para resolver.
+    //
+    // Mientras el pendiente siga abierto, `faltas-hoy` no cuenta a esa persona
+    // como falta. Esa es la razon de ser de esta tabla: sin ella, a quien el
+    // algoritmo no reconoce le llegaria el WhatsApp de falta.
+    async crearPendiente(empleado, rostro, tipoRegistro, motivo, fotoUrl, bloqueId,
+                         qrCode, intentos = 1) {
+        try {
+            const a = new Date();
+            const p = n => String(n).padStart(2, '0');
+            const fechaHoraLocal = `${a.getFullYear()}-${p(a.getMonth() + 1)}-${p(a.getDate())} `
+                + `${p(a.getHours())}:${p(a.getMinutes())}:${p(a.getSeconds())}`;
+
+            const { data, error } = await supabaseClient
+                .from('checadas_pendientes')
+                .insert({
+                    empleado_id: empleado.id,
+                    fecha_hora: fechaHoraLocal,
+                    tipo_registro: tipoRegistro || 'ENTRADA',
+                    bloque_horario_id: bloqueId || null,
+                    foto: fotoUrl || null,
+                    parecido: (rostro && rostro.parecido != null)
+                        ? Number(rostro.parecido.toFixed(3)) : null,
+                    intentos: intentos,
+                    qr_code: qrCode || null,
+                    motivo: motivo || 'ROSTRO_NO_COINCIDE',
+                    tablet_id: typeof TABLET_CONFIG !== 'undefined' ? TABLET_CONFIG.id : null
+                })
+                .select('id')
+                .single();
+
+            if (error) {
+                console.error('No se pudo crear el pendiente:', error);
+                return { success: false };
+            }
+            return { success: true, id: data.id };
+        } catch (e) {
+            console.error('No se pudo crear el pendiente:', e);
+            return { success: false };
+        }
+    },
+
     // Solo para SALIDA: encuentra el bloque cuya hora_salida cae dentro de la
     // tolerancia. Las ENTRADAs se validan con validarHorarioEntrada (Fase 1-A).
     // Fix: antes usaba toISOString() (hora UTC, corrida 7h); ahora hora local.

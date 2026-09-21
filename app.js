@@ -1,10 +1,12 @@
 // CONFIGURACIÓN GLOBAL
-// OJO: esta es la version de PRODUCCION, la de las 8 sucursales, y NO trae
-// reconocimiento facial.
+// OJO: esta es la version de PRODUCCION, la de las 8 sucursales, y desde el
+// 2026-09-21 SI trae reconocimiento facial.
 //
 // El id tiene que quedarse en TABLET_01: es la etiqueta con la que las 8
 // sucursales llevan guardando sus checadas. La tableta en prueba usa otro
-// (MOCHIS_PRUEBA) justo para no perderse entre estas.
+// (MOCHIS_PRUEBA) justo para no perderse entre estas. Al traer cambios de la
+// rama de pruebas hay que revisar SIEMPRE que esta linea no se venga de
+// arrastre: copiarla etiquetaria a toda la empresa como tableta de prueba.
 const TABLET_CONFIG = {
     id: 'TABLET_01',
     location: 'PTRN01'
@@ -1158,11 +1160,18 @@ async function handleQRDetected(code) {
             console.warn('👤 Checada rechazada: nadie se paró frente a la cámara');
             _tiempos.total_sin_contar_a_la_persona = Math.round(performance.now() - arrancoLaFoto)
                 + (_tiempos['validar el QR'] || 0);
+            const fotoSinCara = await subida;
             await SupabaseAPI.guardarIntentoRostro(
                 empleado, { parecido: null }, tipoDetectado, 'SIN_ROSTRO',
-                await subida, { ..._tiempos });
+                fotoSinCara, { ..._tiempos });
             hideLoading();
             limpiarAviso();
+            // Aqui NO se crea pendiente, a diferencia del rechazo por parecido:
+            // no hubo nadie enfrente, asi que no hay una checada real que
+            // rescatar. Volver a escanear el QR cuesta segundos y es lo
+            // correcto; crear un pendiente seria pedirle a RH que autorice una
+            // foto de la pared.
+            //
             // El mensaje dice QUE HACER. "No se detecto rostro" no le sirve a
             // nadie; "colocate frente a la camara" se obedece.
             showError('No se vio tu rostro',
@@ -1180,13 +1189,25 @@ async function handleQRDetected(code) {
             // estuvo bien. Se espera rechazar cerca del 7% de las checadas.
             _tiempos.total_sin_contar_a_la_persona = Math.round(performance.now() - arrancoLaFoto)
                 + (_tiempos['validar el QR'] || 0);
+            const fotoRechazo = await subida;
             await SupabaseAPI.guardarIntentoRostro(
                 empleado, rostro, tipoDetectado, 'ROSTRO_NO_COINCIDE',
-                await subida, { ..._tiempos });
+                fotoRechazo, { ..._tiempos });
+
+            // La checada NO se pierde: queda retenida esperando a que RH la
+            // revise. Antes esto terminaba en "reportalo con tu jefe" y la
+            // persona salia como falta ese dia; ahora su hora ya quedo
+            // guardada y lo unico que falta es que alguien mire la foto.
+            const pendiente = await SupabaseAPI.crearPendiente(
+                empleado, rostro, tipoDetectado, 'ROSTRO_NO_COINCIDE',
+                fotoRechazo, bloqueId, code, maxIntentos);
+
             hideLoading();
             limpiarAviso();
             showError('No se confirmó tu rostro',
-                      'La foto no coincide con tu expediente. Repórtalo con tu jefe.');
+                      pendiente.success
+                        ? 'Tu hora quedó guardada y ya se avisó a Recursos Humanos. No es falta.'
+                        : 'La foto no coincide con tu expediente. Repórtalo con tu jefe.');
             return;
         }
 

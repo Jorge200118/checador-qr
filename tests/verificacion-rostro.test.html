@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Verificación de rostro — pruebas</title>
+<style>body{font-family:monospace;padding:20px}.ok{color:#16a34a}.fail{color:#dc2626}</style>
+</head><body>
+<h1>Verificación de rostro en la tableta</h1>
+<div id="out"></div>
+<script src="../verificacion-rostro.js"></script>
+<script>
+const out = document.getElementById('out');
+let pass = 0, fail = 0;
+function test(nombre, fn) {
+  try { fn(); pass++; out.innerHTML += `<div class="ok">ok &nbsp; ${nombre}</div>`; }
+  catch (e) { fail++; out.innerHTML += `<div class="fail">FAIL ${nombre}: ${e.message}</div>`; }
+}
+async function prueba(nombre, fn) {
+  try { await fn(); pass++; out.innerHTML += `<div class="ok">ok &nbsp; ${nombre}</div>`; }
+  catch (e) { fail++; out.innerHTML += `<div class="fail">FAIL ${nombre}: ${e.message}</div>`; }
+}
+function eq(a, b, msg) {
+  if (JSON.stringify(a) !== JSON.stringify(b))
+    throw new Error(`${msg || ''} esperaba ${JSON.stringify(b)} y dio ${JSON.stringify(a)}`);
+}
+
+window.addEventListener('load', async () => {
+  const REGISTRA = { umbral: 0.40, modo: 'REGISTRA', intentos_maximos: 3 };
+  const BLOQUEA  = { umbral: 0.40, modo: 'BLOQUEA',  intentos_maximos: 3 };
+
+  // === el parecido ===
+  test('un vector consigo mismo da 1', () => {
+    const v = [1, 2, 3, 4];
+    eq(Math.round(vrParecido(v, v) * 1000) / 1000, 1);
+  });
+  test('vectores opuestos dan -1', () =>
+    eq(Math.round(vrParecido([1, 0], [-1, 0]) * 1000) / 1000, -1));
+  test('vectores perpendiculares dan 0', () =>
+    eq(vrParecido([1, 0], [0, 1]), 0));
+  test('sin vector, o de distinto largo, no hay parecido', () => {
+    eq(vrParecido(null, [1, 2]), null);
+    eq(vrParecido([1, 2], [1, 2, 3]), null);
+    eq(vrParecido([0, 0], [1, 1]), null);
+  });
+
+  // === el veredicto ===
+  test('arriba del umbral coincide', () => {
+    const r = vrVeredicto(0.65, REGISTRA);
+    eq(r.coincide, true); eq(r.concluyente, true); eq(r.bloquea, false);
+  });
+  test('justo en el umbral coincide', () =>
+    eq(vrVeredicto(0.40, REGISTRA).coincide, true));
+  test('debajo del umbral no coincide', () =>
+    eq(vrVeredicto(0.39, REGISTRA).coincide, false));
+
+  // === lo que separa REGISTRA de BLOQUEA ===
+  test('en REGISTRA nunca se impide checar, aunque no coincida', () => {
+    const r = vrVeredicto(0.10, REGISTRA);
+    eq(r.coincide, false);
+    eq(r.bloquea, false);
+  });
+  test('en BLOQUEA si se impide cuando no coincide', () =>
+    eq(vrVeredicto(0.10, BLOQUEA).bloquea, true));
+  test('en BLOQUEA no se impide a quien si coincide', () =>
+    eq(vrVeredicto(0.80, BLOQUEA).bloquea, false));
+
+  // === A QUIEN SE LE PUEDE RECHAZAR ===
+  // Se mide a todos, pero solo se rechaza a quien tiene una referencia que
+  // aguante la decision. De 203 referencias, 17 estan flojas y una esta armada
+  // con UNA sola foto: rechazar contra eso seria castigar a la persona por un
+  // expediente mal hecho.
+  const MINIMOS = { min_fotos_referencia: 8, min_cohesion_referencia: 0.72 };
+  const BLOQUEA_CON_MINIMOS = { ...BLOQUEA, ...MINIMOS };
+
+  test('una referencia buena si puede rechazar', () =>
+    eq(vrReferenciaConfiable({ fotos: 20, cohesion: 0.85 }, BLOQUEA_CON_MINIMOS), true));
+
+  test('justo en los minimos, si puede', () =>
+    eq(vrReferenciaConfiable({ fotos: 8, cohesion: 0.72 }, BLOQUEA_CON_MINIMOS), true));
+
+  test('con pocas fotos NO puede rechazar', () => {
+    eq(vrReferenciaConfiable({ fotos: 7, cohesion: 0.95 }, BLOQUEA_CON_MINIMOS), false);
+    eq(vrReferenciaConfiable({ fotos: 1, cohesion: 0.99 }, BLOQUEA_CON_MINIMOS), false);
+  });
+
+  test('con la cohesion floja NO puede rechazar', () =>
+    eq(vrReferenciaConfiable({ fotos: 40, cohesion: 0.71 }, BLOQUEA_CON_MINIMOS), false));
+
+  test('sin cohesion no se le supone una buena', () => {
+    eq(vrReferenciaConfiable({ fotos: 40, cohesion: null }, BLOQUEA_CON_MINIMOS), false);
+    eq(vrReferenciaConfiable({ fotos: 40 }, BLOQUEA_CON_MINIMOS), false);
+  });
+
+  test('sin referencia, nada que rechazar', () =>
+    eq(vrReferenciaConfiable(null, BLOQUEA_CON_MINIMOS), false));
+
+  test('los minimos salen de la config, no del codigo', () => {
+    const flojo = { ...BLOQUEA, min_fotos_referencia: 2, min_cohesion_referencia: 0.50 };
+    eq(vrReferenciaConfiable({ fotos: 3, cohesion: 0.60 }, flojo), true);
+    eq(vrReferenciaConfiable({ fotos: 3, cohesion: 0.60 }, BLOQUEA_CON_MINIMOS), false);
+  });
+
+  // === medir y rechazar NO son lo mismo ===
+  test('a quien tiene referencia floja se le mide pero no se le rechaza', () => {
+    const r = vrVeredicto(0.10, BLOQUEA, false);
+    eq(r.concluyente, true, 'la medicion vale igual:');
+    eq(r.coincide, false, 'y dice que no coincide:');
+    eq(r.bloquea, false, 'pero NO lo rechaza:');
+  });
+
+  test('con referencia buena, no coincidir si rechaza', () =>
+    eq(vrVeredicto(0.10, BLOQUEA, true).bloquea, true));
+
+  test('la referencia floja no vuelve BLOQUEA a un REGISTRA ni al reves', () => {
+    eq(vrVeredicto(0.10, REGISTRA, true).bloquea, false);
+    eq(vrVeredicto(0.90, BLOQUEA, true).bloquea, false);
+  });
+
+  // === LOS QUE SE PARECEN ENTRE SI ===
+  // El QR vuelve facil el problema (¿es el dueño, si o no?) pero deja un hueco:
+  // dos personas parecidas pasan una por la otra. De 183 empleados hay 250
+  // parejas arriba del umbral y la peor son dos hermanos a 0.704.
+  //
+  // La regla: si un parecido le gana al dueño del QR por margen, no es el dueño.
+  // Medido: ataja 132 de 133 suplantaciones y agrega 0 rechazos en 547 fotos.
+  const CON_MARGEN = { ...BLOQUEA, margen_parecidos: 0.05 };
+
+  test('el que se parece mas que el dueño delata la suplantacion', () =>
+    eq(vrGanaUnParecido(0.45, 0.62, CON_MARGEN), true));
+
+  test('ganar por menos del margen NO alcanza', () => {
+    eq(vrGanaUnParecido(0.45, 0.49, CON_MARGEN), false, 'gana por 0.04:');
+    eq(vrGanaUnParecido(0.45, 0.51, CON_MARGEN), true,  'gana por 0.06:');
+  });
+
+  test('que el dueño gane es lo normal y no dispara nada', () =>
+    eq(vrGanaUnParecido(0.80, 0.45, CON_MARGEN), false));
+
+  test('con margen 0 la regla queda apagada', () => {
+    eq(vrGanaUnParecido(0.10, 0.99, { ...BLOQUEA, margen_parecidos: 0 }), false);
+    eq(vrGanaUnParecido(0.10, 0.99, BLOQUEA), false, 'sin el campo tampoco:');
+  });
+
+  test('lo que no se pudo medir no delata a nadie', () => {
+    eq(vrGanaUnParecido(null, 0.9, CON_MARGEN), false);
+    eq(vrGanaUnParecido(0.5, null, CON_MARGEN), false);
+    eq(vrGanaUnParecido(NaN, 0.9, CON_MARGEN), false);
+  });
+
+  // === de la lista corta se toma el que mas se parece ===
+  test('se queda con el mas parecido de la lista', () => {
+    const v = [1, 0, 0];
+    const lista = [
+      { id: 11, vector: [0, 1, 0] },     // 0
+      { id: 22, vector: [1, 1, 0] },     // ~0.707
+      { id: 33, vector: [0, 0, 1] },     // 0
+    ];
+    const m = vrMejorParecido(v, lista);
+    eq(m.id, 22);
+    if (Math.abs(m.parecido - Math.SQRT1_2) > 1e-6) throw new Error(String(m.parecido));
+  });
+
+  test('sin lista de parecidos no hay a quien comparar', () => {
+    eq(vrMejorParecido([1, 0], []), null);
+    eq(vrMejorParecido([1, 0], null), null);
+    eq(vrMejorParecido(null, [{ id: 1, vector: [1, 0] }]), null);
+  });
+
+  test('un parecido que no se puede medir no estorba a los demas', () => {
+    const m = vrMejorParecido([1, 0], [
+      { id: 11, vector: [1, 2, 3] },   // distinto largo: no se puede
+      { id: 22, vector: [1, 0] },
+    ]);
+    eq(m.id, 22);
+  });
+
+  // === lo que NO se puede medir jamas castiga ===
+  test('sin parecido no se concluye nada y no se bloquea', () => {
+    for (const cfg of [REGISTRA, BLOQUEA]) {
+      for (const v of [null, undefined, NaN]) {
+        const r = vrVeredicto(v, cfg);
+        eq(r.concluyente, false, `con ${v} en ${cfg.modo}:`);
+        eq(r.bloquea, false, `con ${v} en ${cfg.modo}:`);
+      }
+    }
+  });
+  test('sin config se usa la prudente y no bloquea', () =>
+    eq(vrVeredicto(0.10, null).bloquea, false));
+
+  // === el umbral sale de la config, no del codigo ===
+  test('con el umbral flojo pasa quien antes no', () => {
+    eq(vrVeredicto(0.30, { umbral: 0.25, modo: 'BLOQUEA' }).coincide, true);
+    eq(vrVeredicto(0.30, { umbral: 0.55, modo: 'BLOQUEA' }).coincide, false);
+  });
+
+  // === los mensajes ===
+  test('a quien coincide no se le dice nada', () =>
+    eq(vrMensaje(vrVeredicto(0.70, BLOQUEA), 1, 3), null));
+  test('con intentos de sobra, se le pide que se acerque', () => {
+    const m = vrMensaje(vrVeredicto(0.10, BLOQUEA), 1, 3);
+    if (!m.includes('1 de 3')) throw new Error(m);
+    if (!m.toLowerCase().includes('acércate')) throw new Error(m);
+  });
+  test('en el ultimo intento y bloqueando, se le manda con su jefe', () => {
+    const m = vrMensaje(vrVeredicto(0.10, BLOQUEA), 3, 3);
+    if (!m.toLowerCase().includes('jefe')) throw new Error(m);
+  });
+  test('en REGISTRA no se le dice nada al final: va a pasar de todos modos', () =>
+    eq(vrMensaje(vrVeredicto(0.10, REGISTRA), 3, 3), null));
+  test('si no se pudo medir, tampoco se le dice nada', () =>
+    eq(vrMensaje(vrVeredicto(null, BLOQUEA), 3, 3), null));
+
+  // === quien hace esperar a la gente ===
+  // Solo BLOQUEA. En REGISTRA la medicion corre despues de guardar la checada,
+  // porque no rechaza a nadie: medido en tableta, la primera medicion del dia
+  // se llevaba 10 segundos y los pagaba quien venia llegando.
+  test('solo BLOQUEA puede detener a alguien', () => {
+    eq(vrDetiene({ modo: 'BLOQUEA' }), true);
+    eq(vrDetiene({ modo: 'REGISTRA' }), false);
+    eq(vrDetiene({ modo: 'APAGADO' }), false);
+    eq(vrDetiene(null), false);
+  });
+
+  test('REGISTRA mide pero no detiene; BLOQUEA hace las dos', () => {
+    // encendido dice si se mide, detiene dice si se espera. No son lo mismo.
+    eq([vrEncendido({modo:'REGISTRA'}), vrDetiene({modo:'REGISTRA'})], [true, false]);
+    eq([vrEncendido({modo:'BLOQUEA'}),  vrDetiene({modo:'BLOQUEA'})],  [true, true]);
+  });
+
+  // === el modo APAGADO ===
+  test('apagado no esta encendido', () => {
+    eq(vrEncendido({ modo: 'APAGADO' }), false);
+    eq(vrEncendido({ modo: 'REGISTRA' }), true);
+    eq(vrEncendido({ modo: 'BLOQUEA' }), true);
+    eq(vrEncendido(null), false);
+  });
+
+  // === nadie espera al modelo ===
+  // El modelo pesa 37 MB y el runtime otros 20. Si no alcanzo a cargar, la
+  // checada pasa SIN medir: hacer esperar a alguien parado frente a la tableta
+  // cuesta mas que perder una medicion.
+  await prueba('el modelo que no carga no detiene la checada', async () => {
+    const inicio = Date.now();
+    const sesion = await vrSesionLista(150);   // aqui nunca va a cargar
+    eq(sesion, null, 'sin modelo se contesta null:');
+    const tardo = Date.now() - inicio;
+    if (tardo > 1000) throw new Error(`espero ${tardo} ms, tenia 150`);
+  });
+
+  await prueba('sin foto no se concluye nada, y por lo tanto no se bloquea', async () => {
+    const r = await vrVerificar(null, 999);
+    eq(r.concluyente, false);
+    eq(r.bloquea, false);
+  });
+
+  // === EL ALINEADO ===
+  // SFace solo sabe comparar caras puestas en una posicion fija. Si esta
+  // matematica se equivoca no truena nada: simplemente todos los puntajes
+  // dejan de significar algo, que es lo que pasaba antes (0.09-0.25 en la
+  // tableta contra 0.88 en el servidor).
+  const casi = (a, b, tol, msg) => {
+    if (Math.abs(a - b) > (tol || 1e-6))
+      throw new Error(`${msg || ''} esperaba ${b} y dio ${a}`);
+  };
+  const aplicar = (t, [x, y]) => [t.c * x - t.s * y + t.tx, t.s * x + t.c * y + t.ty];
+
+  test('puntos que ya estan en su lugar no se mueven', () => {
+    const p = [[0, 0], [1, 0], [0, 1]];
+    const t = vrSemejanza(p, p);
+    casi(t.c, 1, 1e-9, 'escala:'); casi(t.s, 0, 1e-9, 'giro:');
+    casi(t.tx, 0, 1e-9); casi(t.ty, 0, 1e-9);
+  });
+
+  test('el doble de grande se detecta como el doble', () => {
+    const t = vrSemejanza([[0, 0], [1, 0], [0, 1]], [[0, 0], [2, 0], [0, 2]]);
+    casi(t.c, 2, 1e-9, 'escala:'); casi(t.s, 0, 1e-9, 'giro:');
+  });
+
+  test('un cuarto de vuelta se detecta como un cuarto de vuelta', () => {
+    const t = vrSemejanza([[1, 0], [0, 1]], [[0, 1], [-1, 0]]);
+    casi(t.c, 0, 1e-9, 'coseno:'); casi(t.s, 1, 1e-9, 'seno:');
+  });
+
+  // La prueba que de verdad importa: se inventa un giro y una escala, se
+  // aplican, y se comprueba que la funcion los recupera.
+  test('recupera cualquier giro, escala y desplazamiento', () => {
+    const ang = 0.7, esc = 1.9, dx = -12.5, dy = 33;
+    const c = esc * Math.cos(ang), s = esc * Math.sin(ang);
+    const origen = [[10, 20], [80, 25], [45, 60], [20, 95], [70, 92]];
+    const destino = origen.map(([x, y]) => [c * x - s * y + dx, s * x + c * y + dy]);
+
+    const t = vrSemejanza(origen, destino);
+    casi(t.c, c, 1e-9, 'coseno:'); casi(t.s, s, 1e-9, 'seno:');
+    origen.forEach((p, i) => {
+      const [x, y] = aplicar(t, p);
+      casi(x, destino[i][0], 1e-6, `punto ${i} en x:`);
+      casi(y, destino[i][1], 1e-6, `punto ${i} en y:`);
+    });
+  });
+
+  test('no se puede sacar giro de puntos todos encimados', () =>
+    eq(vrSemejanza([[5, 5], [5, 5], [5, 5]], VR_CANONICOS.slice(0, 3)), null));
+
+  test('sin puntos, o de distinto numero, no hay transformacion', () => {
+    eq(vrSemejanza(null, VR_CANONICOS), null);
+    eq(vrSemejanza([[0, 0]], VR_CANONICOS), null);
+    eq(vrSemejanza([[0, 0], [1, 1]], [[0, 0]]), null);
+  });
+
+  // === los cinco puntos salen de donde deben ===
+  test('los cinco puntos salen de los indices medidos', () => {
+    const malla = Array.from({ length: 478 }, (_, i) => [i, i * 2]);
+    const cinco = vrCincoPuntos(malla);
+    eq(cinco[0], [470, 940], 'ojo derecho = centro del iris 468-472:');
+    eq(cinco[1], [475, 950], 'ojo izquierdo = centro del iris 473-477:');
+    eq(cinco[2], [1, 2], 'nariz:');
+    eq(cinco[3], [61, 122], 'boca derecha:');
+    eq(cinco[4], [291, 582], 'boca izquierda:');
+  });
+
+  test('una malla sin iris no sirve para alinear', () => {
+    eq(vrCincoPuntos(Array.from({ length: 468 }, () => [0, 0])), null);
+    eq(vrCincoPuntos(null), null);
+  });
+
+  // === no medir a quien pasaba por atras ===
+  // Medido: en 5 de 18 fotos con dos personas los dos detectores se quedaron
+  // con caras distintas, separadas 560 a 926 pixeles.
+  test('la cara del encuadre pasa, aunque la foto vaya en espejo', () => {
+    // Caja en el video: x de 100 a 300. En la foto espejeada de 1000 de ancho,
+    // esa misma cara queda de 700 a 900.
+    const caja = { originX: 100, originY: 50, width: 200, height: 200 };
+    const enEspejo = [[790, 120], [810, 120], [800, 150], [790, 180], [810, 180]];
+    eq(vrMismaCara(enEspejo, caja, 1000), true);
+  });
+
+  test('una cara del otro lado del cuadro NO pasa', () => {
+    const caja = { originX: 100, originY: 50, width: 200, height: 200 };
+    const lejos = [[100, 120], [120, 120], [110, 150], [100, 180], [120, 180]];
+    eq(vrMismaCara(lejos, caja, 1000), false);
+  });
+
+  test('sin caja no se estorba: se mide y ya', () =>
+    eq(vrMismaCara([[0, 0], [1, 0], [0, 1], [0, 2], [1, 2]], null, 1000), true));
+
+  // === CUAL DE TODAS LAS CARAS SE MIDE ===
+  // Esto costo un rechazo real. El 2026-09-02 a las 16:57 la tableta rechazo a
+  // Jorge con 0.0496 teniendo su cara enfrente: habia dos personas y se midio a
+  // la del fondo. Su cara era la MAS GRANDE (261 px entre ojos contra 235) y
+  // daba 0.600, o sea que habria pasado.
+  const cara = (x, y, ancho) => [
+    [x, y], [x + ancho, y], [x + ancho / 2, y + ancho / 2],
+    [x + ancho * 0.15, y + ancho], [x + ancho * 0.85, y + ancho],
+  ];
+
+  test('sin encuadre, se mide la cara mas grande', () => {
+    const chica = cara(1560, 230, 235), grande = cara(585, 128, 261);
+    eq(vrElegirCara([chica, grande], null, 1920), grande);
+    eq(vrElegirCara([grande, chica], null, 1920), grande, 'no depende del orden:');
+  });
+
+  test('el caso de Jorge: la suya era la mas grande y se elige', () => {
+    // Las medidas reales de esa foto de 1920 de ancho.
+    const otra = cara(1560, 230, 235), suya = cara(585, 128, 261);
+    eq(vrTamanoCara(suya) > vrTamanoCara(otra), true);
+    eq(vrElegirCara([otra, suya], null, 1920), suya);
+  });
+
+  test('el encuadre manda sobre el tamano', () => {
+    // Una cara enorme al fondo, pero el encuadre aprobo la otra.
+    const caja = { originX: 100, originY: 50, width: 200, height: 200 };
+    const enElEncuadre = cara(740, 100, 120);   // dentro de la caja espejeada
+    const enorme = cara(100, 100, 400);
+    eq(vrElegirCara([enorme, enElEncuadre], caja, 1000), enElEncuadre);
+  });
+
+  test('si ninguna cae en el encuadre, no se descartan todas', () => {
+    const caja = { originX: 0, originY: 0, width: 40, height: 40 };
+    const a = cara(500, 500, 100), b = cara(700, 500, 160);
+    eq(vrElegirCara([a, b], caja, 2000), b, 'se queda la mas grande:');
+  });
+
+  test('con una sola cara se mide esa', () => {
+    const sola = cara(500, 500, 100);
+    eq(vrElegirCara([sola], null, 1920), sola);
+  });
+
+  test('sin caras no hay cual medir', () => {
+    eq(vrElegirCara([], null, 1920), null);
+    eq(vrElegirCara(null, null, 1920), null);
+  });
+
+  test('el tamano se mide entre los ojos', () =>
+    eq(Math.round(vrTamanoCara(cara(0, 0, 261))), 261));
+
+  // === EXIGIR QUE HAYA UN ROSTRO ===
+  // Su propio interruptor, aparte de `modo`. Son dos preguntas distintas:
+  // "¿eres tú?" y "¿hay alguien ahí?".
+
+  test('por omision NO se exige: nada cambia hasta que se prenda', () => {
+    eq(vrExigeRostro(VR_CONFIG_DEFECTO), false);
+    eq(vrExigeRostro({ modo: 'BLOQUEA' }), false);
+  });
+
+  test('prendido, se exige', () =>
+    eq(vrExigeRostro({ modo: 'BLOQUEA', exigir_rostro: true }), true));
+
+  test('no depende de BLOQUEA: se puede exigir rostro sin comparar a nadie', () => {
+    // Si algun dia se apaga la comparacion por rechazos falsos, seguir pidiendo
+    // que haya alguien enfrente sigue teniendo sentido: no necesita referencia.
+    eq(vrExigeRostro({ modo: 'REGISTRA', exigir_rostro: true }), true);
+    eq(vrExigeRostro({ modo: 'APAGADO', exigir_rostro: true }), true);
+  });
+
+  test('sin config no se exige nada', () => {
+    eq(vrExigeRostro(null), false);
+    eq(vrExigeRostro(undefined), false);
+  });
+
+  // === PREGUNTARLE A LA FOTO SI HABIA ALGUIEN ===
+  // El encuadre cierra su opinion segundos antes del flash. Si alguien llega en
+  // esos segundos, la foto lo trae y el encuadre no se entero. Paso de verdad:
+  // se rechazo una checada cuya foto tenia la cara enorme. La foto manda.
+  const fotoFalsa = { width: 640, height: 480 };
+
+  await prueba('si la foto trae una cara, lo dice', async () => {
+    _vrMalla = { detect: () => ({ faceLandmarks: [[{ x: 0.5, y: 0.5 }]] }) };
+    eq(await vrHayCara(fotoFalsa), true);
+  });
+
+  await prueba('si la foto es de una pared, lo dice', async () => {
+    _vrMalla = { detect: () => ({ faceLandmarks: [] }) };
+    eq(await vrHayCara(fotoFalsa), false);
+  });
+
+  await prueba('si NO se pudo mirar la foto, no se rechaza a nadie', async () => {
+    // null no es false. No saber no es lo mismo que no haber nadie, y quien
+    // llama solo debe rechazar con un false.
+    _vrMalla = { detect: () => { throw new Error('la malla trono'); } };
+    eq(await vrHayCara(fotoFalsa), null);
+  });
+
+  await prueba('sin foto tampoco se opina', async () => {
+    _vrMalla = { detect: () => ({ faceLandmarks: [] }) };
+    eq(await vrHayCara(null), null);
+  });
+
+  _vrMalla = null;
+
+  out.innerHTML += `<h2 class="${fail ? 'fail' : 'ok'}">${pass} pasaron, ${fail} fallaron</h2>`;
+});
+</script>
+</body></html>

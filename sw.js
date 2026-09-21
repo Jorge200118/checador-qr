@@ -29,7 +29,7 @@
 // Las llamadas a la base (REST, storage de fotos) pasan derecho. Una checada
 // jamas debe contestarse desde un cache.
 
-const VERSION = 'v4';
+const VERSION = 'v5';
 const CACHE_APP = `checador-app-${VERSION}`;
 const CACHE_MODELOS = 'checador-modelos';   // a proposito SIN version
 
@@ -38,9 +38,8 @@ const ARCHIVOS_APP = [
     '/app.js',
     '/supabase-config.js',
     '/bloqueo-horario.js',
-    // deteccion-cara.js y verificacion-rostro.js todavia no existen en este
-    // sitio. Van aqui el dia que se suba el rostro: si se listan antes, el
-    // addAll falla completo por el 404 y no se cachea NADA de la app.
+    '/deteccion-cara.js',
+    '/verificacion-rostro.js',
     '/styles.css',
     '/manifest.json'
 ];
@@ -65,10 +64,24 @@ function esBaseDeDatos(url) {
 
 self.addEventListener('install', (event) => {
     console.log('📱 Service Worker instalando', VERSION);
+    // Uno por uno, NO con addAll.
+    //
+    // addAll es todo o nada: si UN archivo da 404, falla completo y la app se
+    // queda sin cachear NADA. Eso importa justo el dia que se sube un archivo
+    // nuevo —como los dos del rostro— porque entre que se publica el sw.js que
+    // ya lo lista y que el archivo llega al sitio, hay una ventana en la que
+    // cualquier tableta que instale el SW se quedaria sin cache.
+    //
+    // Asi, lo que si esta se guarda y lo que falta se intenta en la siguiente
+    // instalacion. Peor es quedarse sin cache: son 8 sucursales, una de ellas
+    // con 12 KB/s medidos.
     event.waitUntil(
-        caches.open(CACHE_APP)
-            .then(cache => cache.addAll(ARCHIVOS_APP))
-            .catch(error => console.log('📱 Error cacheando la app:', error))
+        caches.open(CACHE_APP).then(cache =>
+            Promise.all(ARCHIVOS_APP.map(archivo =>
+                cache.add(archivo).catch(e =>
+                    console.log(`📱 No se pudo cachear ${archivo}:`, e.message))
+            ))
+        ).catch(error => console.log('📱 Error cacheando la app:', error))
     );
     self.skipWaiting();
 });

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Detección de cara — pruebas</title>
+<style>body{font-family:monospace;padding:20px}.ok{color:#16a34a}.fail{color:#dc2626}</style>
+</head><body>
+<h1>Detección de cara antes de la foto</h1>
+<div id="out"></div>
+<script src="../deteccion-cara.js"></script>
+<script>
+const out = document.getElementById('out');
+let pass = 0, fail = 0;
+function test(nombre, fn) {
+  try { fn(); pass++; out.innerHTML += `<div class="ok">ok &nbsp; ${nombre}</div>`; }
+  catch (e) { fail++; out.innerHTML += `<div class="fail">FAIL ${nombre}: ${e.message}</div>`; }
+}
+async function prueba(nombre, fn) {
+  try { await fn(); pass++; out.innerHTML += `<div class="ok">ok &nbsp; ${nombre}</div>`; }
+  catch (e) { fail++; out.innerHTML += `<div class="fail">FAIL ${nombre}: ${e.message}</div>`; }
+}
+function eq(a, b, msg) {
+  if (JSON.stringify(a) !== JSON.stringify(b))
+    throw new Error(`${msg || ''} esperaba ${JSON.stringify(b)} y dio ${JSON.stringify(a)}`);
+}
+
+window.addEventListener('load', async () => {
+  const caja = (h) => ({ boundingBox: { height: h, width: h } });
+
+  // === que tan grande debe salir la cara ===
+  // 1080 de alto es lo que dan las tabletas.
+  test('una cara del 30% del encuadre sirve', () =>
+    eq(dcCaraUsable(caja(324), 1080), true));
+  test('una cara del 12% justo sirve', () =>
+    eq(dcCaraUsable(caja(130), 1080), true));
+  test('una del 5% no sirve: asi salian las que no se pudieron usar', () =>
+    eq(dcCaraUsable(caja(54), 1080), false));
+  test('sin cara no sirve', () => {
+    eq(dcCaraUsable(null, 1080), false);
+    eq(dcCaraUsable(caja(0), 1080), false);
+  });
+  test('sin alto de video no se puede juzgar', () =>
+    eq(dcCaraUsable(caja(300), 0), false));
+  test('acepta la caja plana, no solo boundingBox', () =>
+    eq(dcCaraUsable({ height: 300 }, 1080), true));
+  test('el minimo es configurable', () => {
+    eq(dcCaraUsable(caja(200), 1080, 0.30), false);
+    eq(dcCaraUsable(caja(200), 1080, 0.10), true);
+  });
+
+  // === de quien se agarra cuando hay varios ===
+  test('se queda con la cara mas grande: quien checa esta enfrente', () => {
+    const r = dcCaraMasGrande([caja(80), caja(340), caja(120)]);
+    eq(r.boundingBox.height, 340);
+  });
+  test('con una sola, esa', () =>
+    eq(dcCaraMasGrande([caja(200)]).boundingBox.height, 200));
+  test('sin detecciones devuelve null', () => {
+    eq(dcCaraMasGrande([]), null);
+    eq(dcCaraMasGrande(null), null);
+  });
+
+  // === lo que se le dice a la persona ===
+  test('el mensaje dice que hacer, no que fallo', () => {
+    eq(dcMensaje(false, false), 'Colócate frente a la cámara');
+    eq(dcMensaje(true, false), 'Acércate un poco más');
+    eq(dcMensaje(true, true), '¡Listo! No te muevas');
+  });
+
+  // === la espera ===
+  test('sin video ni detector no se traba: contesta de inmediato', async () => {
+    const r = await dcEsperarCara(null, null, {});
+    eq(r.hubo, false);
+    eq(r.motivo, 'sin detector');
+  });
+
+  // === DE FRENTE, NO DE PERFIL ===
+  // De aqui salio: de 732 fotos reales, el reconocimiento rechazo 15. Ninguna
+  // era un impostor —todas la persona correcta— y todas estaban de perfil o
+  // mirando al suelo. Las rechazadas dan 0.379 de giro y las buenas 0.056.
+  //
+  // Una cara se arma con los 4 puntos que importan: ojo der, ojo izq, nariz y
+  // centro de la boca. `desvio` corre la nariz de lado.
+  const rostro = (desvio) => ({
+    height: 300,
+    keypoints: [
+      { x: 0.40, y: 0.40 },              // ojo derecho
+      { x: 0.60, y: 0.40 },              // ojo izquierdo
+      { x: 0.50 + desvio, y: 0.50 },     // nariz
+      { x: 0.50, y: 0.60 },              // centro de la boca
+    ],
+  });
+
+  test('de frente el giro es casi cero', () => {
+    const g = dcGiro(rostro(0));
+    if (g > 0.001) throw new Error(`dio ${g}`);
+  });
+
+  test('la nariz corrida se detecta como giro', () => {
+    const poco = dcGiro(rostro(0.02)), mucho = dcGiro(rostro(0.10));
+    if (!(mucho > poco)) throw new Error(`${mucho} deberia ser mayor que ${poco}`);
+  });
+
+  test('el giro no depende del tamano de la cara', () => {
+    // La misma cara al doble de grande da el mismo numero.
+    const chica = rostro(0.05);
+    const grande = { height: 600, keypoints: chica.keypoints.map(p => ({ x: p.x*2, y: p.y*2 })) };
+    const a = dcGiro(chica), b = dcGiro(grande);
+    if (Math.abs(a - b) > 1e-9) throw new Error(`${a} contra ${b}`);
+  });
+
+  test('de frente pasa, de perfil no', () => {
+    eq(dcDeFrente(rostro(0.00), 0.25), true);
+    eq(dcDeFrente(rostro(0.20), 0.25), false, 'muy de lado:');
+  });
+
+  test('sin puntos NO se estorba: no se opina de lo que no se midio', () => {
+    eq(dcGiro({ height: 300 }), null);
+    eq(dcDeFrente({ height: 300 }, 0.25), true);
+    eq(dcCaraUsable({ height: 300 }, 1000), true, 'sigue sirviendo como antes:');
+  });
+
+  test('una cara grande pero de perfil no sirve para la foto', () => {
+    const dePerfil = rostro(0.30);
+    eq(dcCaraUsable(dePerfil, 1000, 0.12, 0.25), false);
+    eq(dcCaraUsable(rostro(0.00), 1000, 0.12, 0.25), true);
+  });
+
+  // === el mensaje distingue lejos de ladeado ===
+  // A quien ya esta cerca decirle "acércate" no le sirve de nada.
+  test('al que esta lejos se le dice que se acerque', () =>
+    eq(dcMensaje(true, false, { height: 50 }, 1000, 0.12), 'Acércate un poco más'));
+
+  test('al que esta cerca pero de lado se le dice que voltee', () =>
+    eq(dcMensaje(true, false, rostro(0.30), 1000, 0.12), 'Voltea de frente a la cámara'));
+
+  test('al que ya esta bien se le dice que no se mueva', () =>
+    eq(dcMensaje(true, true, rostro(0), 1000, 0.12), '¡Listo! No te muevas'));
+
+  // === EL MENSAJE NO DEBE VIBRAR ===
+  // El ciclo del encuadre da unas 25 vueltas por segundo. Si se repinta el
+  // texto en cada vuelta, la persona no alcanza a leerlo. Solo se repinta
+  // cuando el mensaje CAMBIA.
+  const videoFalso = { videoWidth: 1280, videoHeight: 720 };
+
+  await prueba('el mensaje se pinta una sola vez mientras no cambie', async () => {
+    _dcDetector = { detectForVideo: () => ({ detections: [rostro(0)] }) };
+    const dichos = [];
+    const r = await dcEsperarCara(videoFalso, m => dichos.push(m), { cuadrosSeguidos: 4 });
+    eq(r.hubo, true, 'debe disparar:');
+    eq(dichos, ['¡Listo! No te muevas'], 'una sola vez:');
+  });
+
+  await prueba('cuando de verdad cambia, si se vuelve a pintar', async () => {
+    // Primero lejos, luego de perfil, luego bien.
+    const caras = [
+      { height: 50, keypoints: rostro(0).keypoints },   // muy chica
+      rostro(0.30),                                     // de lado
+      rostro(0), rostro(0), rostro(0), rostro(0),       // ya bien
+    ];
+    let i = 0;
+    _dcDetector = { detectForVideo: () => ({ detections: [caras[Math.min(i++, caras.length-1)]] }) };
+    const dichos = [];
+    await dcEsperarCara(videoFalso, m => dichos.push(m), { cuadrosSeguidos: 4 });
+    eq(dichos, ['Acércate un poco más', 'Voltea de frente a la cámara', '¡Listo! No te muevas']);
+  });
+
+  // === NADIE SE PARO FRENTE A LA CAMARA ===
+  // El hueco que se encontro probando el 3-sep: QR en alto desde lejos, cara
+  // fuera del cuadro, y la checada quedaba registrada con una foto de la pared.
+  // Lo delicado no es detectarlo, es NO confundirlo con la gente legitima mal
+  // encuadrada, que si tiene que pasar.
+
+  await prueba('si en 12 segundos no aparece NADIE, se dice asi', async () => {
+    _dcDetector = { detectForVideo: () => ({ detections: [] }) };
+    const r = await dcEsperarCara(videoFalso, null, { esperaMaximaMs: 60 });
+    eq(r.hubo, false);
+    eq(r.motivo, 'nunca aparecio una cara');
+    eq(dcNadieSeParo(r), true, 'esta si se puede rechazar:');
+  });
+
+  await prueba('si aparecio pero nunca quedo bien, NO se le niega la checada', async () => {
+    // Una cara de verdad, pero siempre chica: la persona SI esta ahi.
+    _dcDetector = { detectForVideo: () => ({ detections: [{ height: 50, keypoints: rostro(0).keypoints }] }) };
+    const r = await dcEsperarCara(videoFalso, null, { esperaMaximaMs: 60 });
+    eq(r.hubo, false);
+    eq(r.motivo, 'la cara nunca quedo bien');
+    eq(dcNadieSeParo(r), false, 'esta NO se rechaza:');
+  });
+
+  await prueba('estar de perfil los 12 segundos tampoco cuesta la checada', async () => {
+    // De las 15 fotos que el reconocimiento rechazo, ninguna era un impostor:
+    // todas eran la persona correcta mirando al suelo o de lado.
+    _dcDetector = { detectForVideo: () => ({ detections: [rostro(0.30)] }) };
+    const r = await dcEsperarCara(videoFalso, null, { esperaMaximaMs: 60 });
+    eq(r.motivo, 'la cara nunca quedo bien');
+    eq(dcNadieSeParo(r), false);
+  });
+
+  test('sin detector no se le niega la checada a nadie', () => {
+    // Tableta vieja, CDN caido, sin internet: la falla es nuestra.
+    eq(dcNadieSeParo({ hubo: false, motivo: 'sin detector' }), false);
+  });
+
+  test('si se encuadro bien no hay nada que reclamar', () =>
+    eq(dcNadieSeParo({ hubo: true, motivo: 'ok' }), false));
+
+  test('sin resultado no se rechaza', () => {
+    eq(dcNadieSeParo(null), false);
+    eq(dcNadieSeParo(undefined), false);
+  });
+
+  // === NO TENER A LA GENTE PARADA DE MAS ===
+  // Quien acaba de escanear su QR estaba frente a la tableta hace un segundo.
+  // Si no aparece nadie, esperarle 12 segundos es puro tiempo muerto.
+
+  await prueba('si no aparece nadie se rinde pronto, no al tope', async () => {
+    _dcDetector = { detectForVideo: () => ({ detections: [] }) };
+    const t0 = Date.now();
+    const r = await dcEsperarCara(videoFalso, null,
+      { esperaMaximaMs: 3000, esperaSinNadieMs: 150 });
+    const tardo = Date.now() - t0;
+    eq(r.motivo, 'nunca aparecio una cara');
+    if (tardo > 1200) throw new Error(`tardo ${tardo}ms; debio rendirse cerca de 150`);
+  });
+
+  await prueba('a quien SI aparecio se le espera todo el tiempo', async () => {
+    // Esta ahi, batallando para acomodarse. A ese no se le corta.
+    _dcDetector = { detectForVideo: () => ({ detections: [{ height: 50, keypoints: rostro(0).keypoints }] }) };
+    const t0 = Date.now();
+    const r = await dcEsperarCara(videoFalso, null,
+      { esperaMaximaMs: 400, esperaSinNadieMs: 100 });
+    const tardo = Date.now() - t0;
+    eq(r.motivo, 'la cara nunca quedo bien');
+    if (tardo < 350) throw new Error(`tardo solo ${tardo}ms: se le corto la espera`);
+  });
+
+  _dcDetector = null;
+
+  out.innerHTML += `<h2 class="${fail ? 'fail' : 'ok'}">${pass} pasaron, ${fail} fallaron</h2>`;
+});
+</script>
+</body></html>
