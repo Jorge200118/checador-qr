@@ -84,24 +84,56 @@ function decir(texto, forzar) {
         // Lo de antes se cancela: importa lo que pasa ahora, no lo de hace rato.
         speechSynthesis.cancel();
 
-        const u = new SpeechSynthesisUtterance(texto);
-        const v = vozEnEspanol();
-        if (v) u.voice = v;
-        u.lang = (v && v.lang) || 'es-MX';
-        // Un poco mas despacio de lo normal: se oye en un mostrador con ruido y
-        // le da tiempo a la persona de reaccionar.
-        u.rate = 0.95;
-        u.pitch = 1.0;
-        u.volume = 1.0;
-        speechSynthesis.speak(u);
+        const hablar = () => {
+            try {
+                const u = new SpeechSynthesisUtterance(texto);
+                const v = vozEnEspanol();
+                if (v) u.voice = v;
+                u.lang = (v && v.lang) || 'es-MX';
+                // Un poco mas despacio de lo normal: se oye en un mostrador con
+                // ruido y le da tiempo a la persona de reaccionar.
+                u.rate = 0.95;
+                u.pitch = 1.0;
+                u.volume = 1.0;
+                speechSynthesis.speak(u);
+            } catch (e) {
+                console.warn('🔊 No se pudo hablar:', e);
+            }
+        };
+
+        // No se habla en el MISMO instante del cancel().
+        //
+        // Probando en la tableta el 2026-09-21 se vio esto: el aviso del
+        // encuadre ("¡SONRÍE!") si se oia, pero el mensaje del rechazo no. En el
+        // rechazo se llama limpiarAviso() —que cancela— y enseguida decir(), que
+        // vuelve a cancelar y habla de inmediato. Chrome se queda colgado con
+        // los dos seguidos y el mensaje no sale nunca.
+        //
+        // Un respiro de un cuadro basta para que el motor termine de limpiar.
+        setTimeout(hablar, 60);
     } catch (e) {
         console.warn('🔊 No se pudo hablar:', e);
     }
 }
 
-// Limpia el recuerdo del ultimo mensaje. Se llama al terminar una checada para
-// que el primer aviso de la siguiente persona SI se diga, aunque sea el mismo.
+// Limpia el recuerdo del ultimo mensaje, para que el primer aviso de la
+// siguiente persona SI se diga aunque le toque el mismo.
+//
+// OJO: esto NO calla lo que se este diciendo, y es a proposito. Antes si lo
+// hacia, y ahi estaba el error: `limpiarAviso()` se llama justo ANTES de
+// mostrar el mensaje de rechazo, asi que cancelaba la voz en el momento exacto
+// en que habia algo importante que decir. La persona veia el letrero y no oia
+// nada.
+//
+// Para callar de verdad esta `vozCallar`, que se usa al cerrar la pantalla de
+// mensaje: ahi si ya no hay nada que decir.
 function vozOlvidar() {
+    _vozUltimo = '';
+    _vozCuando = 0;
+}
+
+// Calla lo que se este diciendo. Se usa cuando la persona ya se fue.
+function vozCallar() {
     _vozUltimo = '';
     _vozCuando = 0;
     try {
@@ -110,5 +142,5 @@ function vozOlvidar() {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { decir, vozOlvidar, vozDisponible, VOZ_REPETIR_MS };
+    module.exports = { decir, vozOlvidar, vozCallar, vozDisponible, VOZ_REPETIR_MS };
 }

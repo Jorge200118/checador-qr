@@ -1634,6 +1634,9 @@ function hideMessage() {
     if (elements.messageSection) {
         elements.messageSection.style.display = 'none';
     }
+    // Aqui si se calla: la persona ya cerro el mensaje y se va. Seguir hablando
+    // encima de quien viene llegando solo confunde.
+    if (typeof vozCallar === 'function') vozCallar();
 }
 
 function showSection(section) {
