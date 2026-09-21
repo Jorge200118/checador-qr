@@ -1192,8 +1192,16 @@ async function handleQRDetected(code) {
             //
             // El mensaje dice QUE HACER. "No se detecto rostro" no le sirve a
             // nadie; "colocate frente a la camara" se obedece.
+            // Se dice EN VOZ ALTA, forzando aunque se acabe de decir: este es el
+            // momento en que a la persona se le esta negando la checada, y si no
+            // se entera va a volver a hacer exactamente lo mismo.
+            if (typeof decir === 'function') {
+                decir('No se vio tu rostro. Aléjate un poco, no tapes la cámara ' +
+                      'y vuelve a escanear tu código.', true);
+            }
             showError('No se vio tu rostro',
-                      'Colócate frente a la cámara y vuelve a escanear tu QR.');
+                      'Aléjate un poco, no tapes la cámara con la mano y vuelve ' +
+                      'a escanear tu QR.');
             return;
         }
 
@@ -1759,10 +1767,23 @@ function guiar(mensaje) {
         encima.textContent = mensaje;
         encima.style.display = mensaje ? 'block' : 'none';
     }
+    // Y tambien en voz alta.
+    //
+    // El letrero va ENCIMA DEL VIDEO, y quien esta levantando el QR frente a la
+    // camara no esta mirando la pantalla — justo la persona a la que hay que
+    // decirle algo. Por eso se dice tambien en voz alta.
+    //
+    // El emoji se quita antes: la voz lo lee y suena ridiculo.
+    if (typeof decir === 'function' && mensaje) {
+        decir(mensaje.replace(/[^\p{L}\p{N}\s,.!¡?¿-]/gu, '').trim());
+    }
 }
 
 function limpiarAviso() {
     if (elements.cameraAviso) elements.cameraAviso.style.display = 'none';
+    // Se olvida el ultimo mensaje para que el primer aviso de la siguiente
+    // persona si se diga, aunque le toque el mismo.
+    if (typeof vozOlvidar === 'function') vozOlvidar();
 }
 
 // UTILIDADES

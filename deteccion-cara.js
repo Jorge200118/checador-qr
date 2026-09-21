@@ -34,6 +34,18 @@
 // está enfrente y descarta al que va pasando al fondo.
 const DC_CARA_MINIMA = 0.12;
 
+// Y qué tan grande es DEMASIADO grande.
+//
+// El otro extremo del mismo problema. Si la cara ocupa casi todo el alto del
+// encuadre es que la persona esta pegada al lente, y ahi la foto sale cortada
+// —sin frente, sin barbilla— o con la mano encima. El reconocimiento necesita
+// los cinco puntos (ojos, nariz, comisuras) y si falta alguno no puede alinear
+// la cara, asi que no mide nada.
+//
+// 0.85 deja pasar holgado a quien se para de cerca a proposito —las buenas
+// rondan 0.30-0.40 de alto— y solo avisa cuando de verdad esta encima.
+const DC_CARA_MAXIMA = 0.85;
+
 // Que tan de lado puede estar la cara antes de pedirle que voltee.
 //
 // De aqui salio: se revisaron las 15 fotos que el reconocimiento rechazo de 732
@@ -142,7 +154,19 @@ function dcMensaje(hayCara, esUsable, cara, altoVideo, minima) {
 
     const alto = cara && (cara.height || (cara.boundingBox && cara.boundingBox.height));
     const tope = (minima === undefined || minima === null) ? DC_CARA_MINIMA : minima;
-    const cerca = alto && altoVideo && (alto / altoVideo) >= tope;
+    const proporcion = alto && altoVideo ? alto / altoVideo : 0;
+
+    // Demasiado cerca. Se agrega el 2026-09-21: el primer dia con el rostro en
+    // las 8 sucursales aparecieron fotos con la cara cortada por estar pegada al
+    // lente, y otras con la mano encima sosteniendo el QR. En las dos, la cara
+    // ocupa casi todo el cuadro o se sale de el, y el reconocimiento no tiene
+    // con que trabajar.
+    //
+    // "Acercate" y "voltea" no sirven aqui —ya esta cerca y de frente—; hay que
+    // decirle lo contrario.
+    if (proporcion >= DC_CARA_MAXIMA) return 'Aléjate un poco de la cámara';
+
+    const cerca = proporcion >= tope;
     return cerca ? 'Voltea de frente a la cámara' : 'Acércate un poco más';
 }
 

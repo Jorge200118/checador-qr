@@ -29,7 +29,7 @@
 // Las llamadas a la base (REST, storage de fotos) pasan derecho. Una checada
 // jamas debe contestarse desde un cache.
 
-const VERSION = 'v5';
+const VERSION = 'v6';
 const CACHE_APP = `checador-app-${VERSION}`;
 const CACHE_MODELOS = 'checador-modelos';   // a proposito SIN version
 
@@ -38,6 +38,7 @@ const ARCHIVOS_APP = [
     '/app.js',
     '/supabase-config.js',
     '/bloqueo-horario.js',
+    '/voz.js',
     '/deteccion-cara.js',
     '/verificacion-rostro.js',
     '/styles.css',
