@@ -777,8 +777,15 @@ async function vrVerificar(foto, empleadoId, caja) {
                    && vrReferenciaConfiable(referencia, config)
                    && await vrFueraDeAprendizaje(empleadoId);
     if (!confiable) {
+        // OJO: `referencia` puede ser null —es el caso de quien esta armando la
+        // suya— y leerle .fotos revienta. Eso paso el 2026-09-22: a las siete
+        // personas sin referencia la tableta les mostraba "Error / No se pudo
+        // conectar", que es el mensaje del catch general, y no podian checar.
+        // El servidor nunca fallo: fallaba aqui, en un console.log.
         console.log('🧬 Se mide pero no se rechaza a', empleadoId,
-                    `(${referencia.fotos} fotos, cohesion ${referencia.cohesion})`);
+                    referencia
+                      ? `(${referencia.fotos} fotos, cohesion ${referencia.cohesion})`
+                      : '(todavia sin referencia)');
     }
 
     // Si la persona esta esperando (BLOQUEA) hay un techo de tiempo; si no, se

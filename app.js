@@ -915,6 +915,15 @@ async function handleQRDetected(code) {
     console.log('📱 QR detectado:', code);
     appState.processing = true;
 
+    // Quien esta checando, guardado FUERA del try.
+    //
+    // Si algo revienta a media checada, el catch de abajo necesita saber a quien
+    // le paso para poder anotarlo. `empleado` se declara con const dentro del
+    // try, asi que desde el catch no se ve. Sin esto, el error queda sin dueño y
+    // hay que adivinar —que es lo que paso el 2026-09-22 con siete personas.
+    let _quienChecaba = null;
+    let _queChecaba = null;
+
     // Se limpia el mensaje del anterior: el escaner sigue vivo detras de el, asi
     // que el que sigue puede llegar con la pantalla del compañero todavia arriba.
     hideMessage();
@@ -955,6 +964,8 @@ async function handleQRDetected(code) {
         }
 
         const { empleado, tipoRegistro: tipoDetectado, bloqueId } = validation;
+        _quienChecaba = empleado;
+        _queChecaba = tipoDetectado;
 
         console.log('✅ QR válido:', {
             empleado: `${empleado.nombre} ${empleado.apellido}`,
@@ -1331,7 +1342,32 @@ async function handleQRDetected(code) {
     } catch (error) {
         console.error('❌ Error procesando QR:', error);
         hideLoading();
-        showError('Error', 'No se pudo conectar');
+
+        // Se deja constancia de QUE fallo, no solo de que fallo algo.
+        //
+        // El 2026-09-22 siete personas no pudieron checar y la tableta decia
+        // "No se pudo conectar". El servidor nunca fallo: reventaba un
+        // console.log en la tableta al leerle un dato a quien no tiene
+        // referencia todavia. Se perdieron horas adivinando porque este catch
+        // se tragaba el error de verdad y culpaba a la red.
+        //
+        // Va sin await: la persona ya tiene su mensaje en pantalla y esto no
+        // puede hacerla esperar. Si tampoco se puede guardar, ni modo.
+        try {
+            const detalle = (error && (error.message || String(error))) || 'sin detalle';
+            if (_quienChecaba && _quienChecaba.id) {
+                SupabaseAPI.guardarIntentoRostro(
+                    _quienChecaba, { parecido: null },
+                    _queChecaba || 'ENTRADA',
+                    `ERROR_TABLETA: ${detalle}`.slice(0, 300),
+                    null, { ..._tiempos });
+            }
+        } catch (e) { /* no se pudo anotar; el mensaje ya se mostro */ }
+
+        // El mensaje dice QUE HACER. Antes decia "No se pudo conectar" para
+        // cualquier falla, que ademas suele ser mentira.
+        showError('No se pudo registrar',
+                  'Vuelve a escanear tu QR. Si sigue igual, avisa a tu jefe.');
     } finally {
         appState.processing = false;
         resetMode();
