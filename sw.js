@@ -29,7 +29,7 @@
 // Las llamadas a la base (REST, storage de fotos) pasan derecho. Una checada
 // jamas debe contestarse desde un cache.
 
-const VERSION = 'v8';
+const VERSION = 'v9';
 const CACHE_APP = `checador-app-${VERSION}`;
 const CACHE_MODELOS = 'checador-modelos';   // a proposito SIN version
 

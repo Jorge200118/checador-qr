@@ -1060,13 +1060,18 @@ async function handleQRDetected(code) {
             const urge = !caraLista.hubo && (typeof dcNadieSeParo === 'function')
                 && dcNadieSeParo(caraLista);
             for (let i = cuenta; i >= 1; i--) {
+                // La cuenta se dice en voz alta SOLO cuando urge, o sea cuando
+                // no se vio a nadie: ahi la persona necesita enterarse de que
+                // se tiene que poner enfrente. El "Tomando foto en 3..." de
+                // quien ya esta bien puesto va callado — no corrige nada y en
+                // cada checada cansa.
                 guiar(urge
                     ? `👤 Colócate frente a la cámara — foto en ${i}...`
-                    : `📸 Tomando foto en ${i}...`);
+                    : `📸 Tomando foto en ${i}...`, !urge);
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
-            guiar('📸 ¡SONRÍE!');
+            guiar('📸 ¡SONRÍE!', true);   // el letrero si, la voz no
 
             // Efecto de flash
             const flashOverlay = document.createElement('div');
@@ -1799,7 +1804,13 @@ function updateStatus(message, type = 'info') {
 // Solo para el encuadre y la foto. La cháchara del escaner ("Escaneando... 7s",
 // cada segundo) sigue en la tira: encima del video seria un letrero permanente
 // tapando a todo el mundo.
-function guiar(mensaje) {
+// `callado` muestra el letrero SIN decirlo en voz alta.
+//
+// No todo lo que se escribe hay que decirlo. La voz esta para corregir a quien
+// no esta mirando la pantalla —"alejate", "voltea", "acercate"—; avisar que la
+// foto esta por tomarse no corrige nada, y oir "¡SONRÍE!" y la cuenta atras en
+// cada checada cansa en un mostrador con gente.
+function guiar(mensaje, callado) {
     updateStatus(mensaje, 'warning');
     const encima = elements.cameraAviso;
     if (encima) {
@@ -1813,7 +1824,7 @@ function guiar(mensaje) {
     // decirle algo. Por eso se dice tambien en voz alta.
     //
     // El emoji se quita antes: la voz lo lee y suena ridiculo.
-    if (typeof decir === 'function' && mensaje) {
+    if (!callado && typeof decir === 'function' && mensaje) {
         decir(mensaje.replace(/[^\p{L}\p{N}\s,.!¡?¿-]/gu, '').trim());
     }
 }
