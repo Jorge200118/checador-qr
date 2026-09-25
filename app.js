@@ -1043,14 +1043,16 @@ async function handleQRDetected(code) {
             if (typeof dcEsperarCara === 'function' &&
                 (typeof switchActivo !== 'function' || switchActivo('cara_obligatoria'))) {
                 caraLista = await dcEsperarCara(elements.videoElement, (mensaje) => {
-                    guiar(`👤 ${mensaje}`);
+                    // Vacio = ya esta bien puesta: se quita el letrero que
+                    // hubiera ("Acércate...") y no se dice nada.
+                    guiar(mensaje ? `👤 ${mensaje}` : '');
                 });
             }
 
             // Con la cara ya encuadrada NO hay cuenta: el encuadre ya espero a
             // cuatro cuadros seguidos con la persona bien puesta, o sea que ya
-            // esta viendo a la camara y ya vio el "¡Listo! No te muevas".
-            // Contarle otro segundo encima es un segundo de nada.
+            // esta viendo a la camara. Contarle otro segundo encima es un
+            // segundo de nada.
             //
             // Sin detector si se cuenta, porque ahi nadie le aviso.
             const cuenta = caraLista.hubo ? 0 : 3;

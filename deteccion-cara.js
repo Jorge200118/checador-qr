@@ -150,7 +150,10 @@ function dcCaraMasGrande(detecciones) {
 // a quien ya esta cerca decirle "acércate" no le sirve de nada.
 function dcMensaje(hayCara, esUsable, cara, altoVideo, minima) {
     if (!hayCara) return 'Colócate frente a la cámara';
-    if (esUsable) return '¡Listo! No te muevas';
+    // Ya esta bien puesta: no hay nada que corregir, asi que no se le dice nada.
+    // Antes decia "¡Listo! No te muevas" en cada checada, en pantalla y en voz
+    // alta; se quito el 2026-09-25 a peticion de Jorge.
+    if (esUsable) return '';
 
     const alto = cara && (cara.height || (cara.boundingBox && cara.boundingBox.height));
     const tope = (minima === undefined || minima === null) ? DC_CARA_MINIMA : minima;

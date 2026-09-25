@@ -61,7 +61,7 @@ window.addEventListener('load', async () => {
   test('el mensaje dice que hacer, no que fallo', () => {
     eq(dcMensaje(false, false), 'Colócate frente a la cámara');
     eq(dcMensaje(true, false), 'Acércate un poco más');
-    eq(dcMensaje(true, true), '¡Listo! No te muevas');
+    eq(dcMensaje(true, true), '');
   });
 
   // === la espera ===
@@ -131,8 +131,8 @@ window.addEventListener('load', async () => {
   test('al que esta cerca pero de lado se le dice que voltee', () =>
     eq(dcMensaje(true, false, rostro(0.30), 1000, 0.12), 'Voltea de frente a la cámara'));
 
-  test('al que ya esta bien se le dice que no se mueva', () =>
-    eq(dcMensaje(true, true, rostro(0), 1000, 0.12), '¡Listo! No te muevas'));
+  test('al que ya esta bien no se le dice nada', () =>
+    eq(dcMensaje(true, true, rostro(0), 1000, 0.12), ''));
 
   // === EL MENSAJE NO DEBE VIBRAR ===
   // El ciclo del encuadre da unas 25 vueltas por segundo. Si se repinta el
@@ -145,7 +145,7 @@ window.addEventListener('load', async () => {
     const dichos = [];
     const r = await dcEsperarCara(videoFalso, m => dichos.push(m), { cuadrosSeguidos: 4 });
     eq(r.hubo, true, 'debe disparar:');
-    eq(dichos, ['¡Listo! No te muevas'], 'una sola vez:');
+    eq(dichos, [''], 'una sola vez:');
   });
 
   await prueba('cuando de verdad cambia, si se vuelve a pintar', async () => {
@@ -159,7 +159,7 @@ window.addEventListener('load', async () => {
     _dcDetector = { detectForVideo: () => ({ detections: [caras[Math.min(i++, caras.length-1)]] }) };
     const dichos = [];
     await dcEsperarCara(videoFalso, m => dichos.push(m), { cuadrosSeguidos: 4 });
-    eq(dichos, ['Acércate un poco más', 'Voltea de frente a la cámara', '¡Listo! No te muevas']);
+    eq(dichos, ['Acércate un poco más', 'Voltea de frente a la cámara', '']);
   });
 
   // === NADIE SE PARO FRENTE A LA CAMARA ===
